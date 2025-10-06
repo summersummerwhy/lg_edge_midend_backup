@@ -1,0 +1,29 @@
+# TODO
+server:
+  host: "0.0.0.0" 
+  port: 8000
+  debug: false
+
+mqtt:
+  broker: "localhost"  # MQTT 브로커 주소 (예: mosquitto)
+  port: 1883
+  username: ""  # 필요시 입력
+  password: ""  # 필요시 입력
+  client_id: "rpi4_manager"
+  topics:
+    subscribe:
+      - "sensors/#"
+      - "devices/#"
+    publish: "commands/#"
+  qos: 1
+  keepalive: 60
+
+onnx:
+  model_path: "models/model.onnx"
+  providers:
+    - "CPUExecutionProvider"
+  
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/server.log"

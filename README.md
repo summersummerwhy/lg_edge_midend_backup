@@ -54,7 +54,6 @@ python main.py
 ├── config.yaml          # 설정 파일
 ├── requirements.txt     # Python 패키지 목록
 ├── setup.sh            # 초기 설정 스크립트
-├── Dockerfile          # Docker 이미지 (선택사항)
 ├── .env                # 환경변수 (자동 생성)
 ├── models/             # ONNX 모델 저장 디렉토리
 ├── logs/               # 로그 파일 디렉토리
