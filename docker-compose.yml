@@ -24,6 +24,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      network: host
+    network_mode: host
     container_name: topst
 #    env_file:
 #      - .env
