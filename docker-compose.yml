@@ -4,6 +4,7 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: mosquitto
+    network_mode: "host"
     ports:
       - "1883:1883"
 #      - "9001:9001"
@@ -30,7 +31,7 @@ services:
 #    env_file:
 #      - .env
     environment:
-      - MQTT_HOST=mosquitto
+      - MQTT_HOST=127.0.0.1
       - MQTT_PORT=1883
       # - MQTT_USER=server
       # - MQTT_PASS=server_pass
