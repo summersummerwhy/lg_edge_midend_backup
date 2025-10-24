@@ -17,7 +17,7 @@ from asyncio_mqtt import Client as MQTTClient, MqttError
 # from ai.main import track_image, track_image_by_path
 from dotenv import load_dotenv
 
-from app.ai.main import track_image_by_path
+from ai.main import track_image_by_path
 
 load_dotenv()
 # ================== 환경 ==================

@@ -1,11 +1,11 @@
-from app.ai.inference import inference
+from ai.inference import inference
 
-import utils
-import mqtt
+import ai.utils
+import ai.mqtt
 
 import cv2
 
-from app.ai.tracker import tracker
+from ai.tracker import tracker
 
 
 def visualize(image, box, color):
