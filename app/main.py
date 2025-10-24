@@ -301,7 +301,7 @@ async def handle_camera(msg: Envelope):
 
 async def route_message(topic: str, payload: bytes):
     try:
-        print(payload)
+        #print(payload)
         env = Envelope(**json.loads(payload.decode()))
     except Exception as e:
         print(f"[MQTT] invalid envelope: {e}")
