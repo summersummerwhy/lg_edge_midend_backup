@@ -17,8 +17,7 @@ from asyncio_mqtt import Client as MQTTClient, MqttError
 # from ai.main import track_image, track_image_by_path
 from dotenv import load_dotenv
 
-from ai.main import track_image_by_path
-from ai.mqtt import publish_mqtt
+from app.ai.main import track_image_by_path
 
 load_dotenv()
 # ================== 환경 ==================
@@ -95,6 +94,94 @@ def save_wav_pcm16_mono(pcm_bytes: bytes, sample_rate: int, out_path: Path) -> N
 
 def safe_filename(name: str) -> str:
     return "".join(c if c.isalnum() or c in "-_." else "_" for c in name)
+
+# === 전역 상태 ===
+seq_number = 0
+_mqtt_client: Optional[MQTTClient] = None
+_mqtt_lock = asyncio.Lock()
+
+async def _connect_client() -> MQTTClient:
+    """전역 MQTT 클라이언트를 연결 또는 재사용."""
+    global _mqtt_client
+
+    if _mqtt_client is not None:
+        return _mqtt_client
+
+    client = MQTTClient(
+        hostname=MQTT_HOST,
+        port=MQTT_PORT,
+        username=MQTT_USER,
+        password=MQTT_PASS,
+        client_id=MQTT_CLIENT_ID,
+        keepalive=MQTT_KEEPALIVE,
+    )
+    await client.connect()
+    _mqtt_client = client
+    print(f"[MQTT-PUB] Connected to {MQTT_HOST}:{MQTT_PORT}")
+    return client
+
+async def _disconnect_client():
+    """MQTT 클라이언트 안전 종료 (FastAPI shutdown 훅에서 호출)."""
+    global _mqtt_client
+    if _mqtt_client is not None:
+        try:
+            await _mqtt_client.disconnect()
+        except Exception:
+            pass
+        finally:
+            _mqtt_client = None
+        print("[MQTT-PUB] Disconnected")
+
+async def publish_mqtt(
+    topic: str,
+    message: Dict[str, Any],
+    *,
+    qos: int = 1,
+    retain: bool = False,
+    max_retries: int = 5,
+    base_delay: float = 0.5,
+):
+    """
+    asyncio-mqtt 기반 비동기 퍼블리시 함수.
+    - 전역 seq_number 증가
+    - MQTT 자동 연결 / 재연결
+    - 지수 백오프 재시도 지원
+    """
+    global seq_number, _mqtt_client
+
+    seq_number += 1
+    message = dict(message)
+    message["seq"] = seq_number
+
+    payload = json.dumps(message, ensure_ascii=False, default=str).encode("utf-8")
+
+    attempt = 0
+    while True:
+        try:
+            async with _mqtt_lock:
+                client = await _connect_client()
+                await client.publish(topic, payload, qos=qos, retain=retain)
+
+            print(f"[MQTT-PUB] Published to {topic} (qos={qos}, retain={retain}, seq={seq_number})")
+            return  # 성공 시 종료
+
+        except MqttError as e:
+            print(f"[MQTT-PUB] Publish error: {e}")
+            async with _mqtt_lock:
+                if _mqtt_client:
+                    try:
+                        await _mqtt_client.disconnect()
+                    except Exception:
+                        pass
+                    _mqtt_client = None
+
+            attempt += 1
+            if attempt > max_retries:
+                raise RuntimeError(f"[MQTT-PUB] Failed after {max_retries} retries: {e}")
+
+            delay = base_delay * (2 ** (attempt - 1))
+            print(f"[MQTT-PUB] Retrying in {delay:.1f}s...")
+            await asyncio.sleep(delay)
 
 async def handle_motion(msg: Envelope):
     if is_duplicate(msg.device, "motion", msg.seq):
@@ -335,6 +422,8 @@ async def on_shutdown():
         with contextlib.suppress(asyncio.CancelledError):
             await task
     print("[SHUTDOWN] MQTT worker stopped.")
+
+    await _disconnect_client()
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")), reload=False)

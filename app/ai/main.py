@@ -1,9 +1,11 @@
-from inference import inference
-from tracker import tracker
+from app.ai.inference import inference
+
 import utils
 import mqtt
 
 import cv2
+
+from app.ai.tracker import tracker
 
 
 def visualize(image, box, color):
@@ -73,19 +75,19 @@ def track_image_by_path(image_path, image_format = "jpg"):
 
 
 
-if __name__ == "__main__":
-    DEVICE = "topst"
-
-    while True:
-        recv_message = mqtt.wait_for_mqtt()
-
-        timestamp = recv_message["ts"]
-        image = recv_message["payload"]["data_b64"]
-        image_format = recv_message["payload"]["format"]
-
-        image = utils.from_base64(image, image_format)
-        payloads = track_image(image, image_format)
-
-        for payload in payloads:
-            message = {"device": DEVICE, "ts": timestamp, "payload": payload}
-            mqtt.publish_mqtt(f"topst/{DEVICE}/ai", message)
+# if __name__ == "__main__":
+#     DEVICE = "topst"
+#
+#     while True:
+#         recv_message = mqtt.wait_for_mqtt()
+#
+#         timestamp = recv_message["ts"]
+#         image = recv_message["payload"]["data_b64"]
+#         image_format = recv_message["payload"]["format"]
+#
+#         image = utils.from_base64(image, image_format)
+#         payloads = track_image(image, image_format)
+#
+#         for payload in payloads:
+#             message = {"device": DEVICE, "ts": timestamp, "payload": payload}
+#             mqtt.publish_mqtt(f"topst/{DEVICE}/ai", message)
