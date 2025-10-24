@@ -251,19 +251,44 @@ async def handle_audio(msg: Envelope):
         audio_buffer[device].clear()
         audio_start_ts[device] = msg.ts
 
+camera_chunks = {}
+
 async def handle_camera(msg: Envelope):
-    if is_duplicate(msg.device, "camera", msg.seq):
-        return
+    # if is_duplicate(msg.device, "camera", msg.seq):
+    #     return
+
     p = CameraPayload(**msg.payload)
-    jpg = base64.b64decode(p.data_b64)
+    key = (msg.device, msg.seq)
 
-    day = datetime.utcfromtimestamp(msg.ts / 1000).strftime("%Y%m%d")
-    subdir = IMAGE_DIR / safe_filename(msg.device) / day
-    fpath = subdir / f"{msg.ts}_{msg.seq}.jpg"
-    subdir.mkdir(parents=True, exist_ok=True)
-    with open(fpath, "wb") as f:
-        f.write(jpg)
+    # === 단일 전송 ===
+    if not hasattr(p, "part"):
+        jpg = base64.b64decode(p.data_b64)
+        fpath = _save_image_file(msg.device, msg.ts, msg.seq, jpg)
+    else:
+        # === 청크 전송 ===
+        st = camera_chunks.setdefault(key, {"chunks": [], "last_idx": -1, "start_ts": msg.ts})
+        if p.idx == st["last_idx"] + 1:  # 순서대로 왔을 때만 이어붙임
+            st["chunks"].append(p.data_b64)
+            st["last_idx"] = p.idx
+        else:
+            # 중간 누락 → 지금까지 받은 부분까지만 저장
+            if st["chunks"]:
+                jpg = base64.b64decode("".join(st["chunks"]))
+                fpath = _save_image_file(msg.device, st["start_ts"], msg.seq, jpg)
+                print(f"[CAMERA] {msg.device} seq={msg.seq} partial ({len(jpg)}B, {len(st['chunks'])} chunks)")
+            camera_chunks.pop(key, None)
+            return
 
+        # 마지막 청크면 합쳐서 저장
+        if p.part == "end" or len(st["chunks"]) == p.total:
+            jpg = base64.b64decode("".join(st["chunks"]))
+            fpath = _save_image_file(msg.device, st["start_ts"], msg.seq, jpg)
+            print(f"[CAMERA] {msg.device} seq={msg.seq} full ({len(jpg)}B, {len(st['chunks'])} chunks)")
+            camera_chunks.pop(key, None)
+        else:
+            return  # 아직 조립 중
+
+    # === 이후 로직 (기존 그대로 유지) ===
     latest[(msg.device, "camera")] = {
         "device": msg.device,
         "ts": msg.ts,
@@ -291,12 +316,21 @@ async def handle_camera(msg: Envelope):
                 "seq": msg.seq,
                 "payload": payload,
             }
-            topic = f"topst/topst/ai"
+            topic = "topst/topst/ai"
             await publish_mqtt(topic, ai_msg)
             print(f"[AI-PUB] published AI result to {topic} ({payload['type']}, track_id={payload['track_id']})")
-
     except Exception as e:
         print(f"[AI][CAMERA] error processing {fpath.name}: {e}")
+
+def _save_image_file(device, ts, seq, jpg):
+    """이미지를 파일로 저장하고 경로 반환"""
+    day = datetime.utcfromtimestamp(ts / 1000).strftime("%Y%m%d")
+    subdir = IMAGE_DIR / safe_filename(device) / day
+    subdir.mkdir(parents=True, exist_ok=True)
+    fpath = subdir / f"{ts}_{seq}.jpg"
+    with open(fpath, "wb") as f:
+        f.write(jpg)
+    return fpath
 
 
 async def route_message(topic: str, payload: bytes):
