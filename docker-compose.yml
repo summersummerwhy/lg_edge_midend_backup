@@ -4,7 +4,6 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: mosquitto
-    network_mode: "host"
     ports:
       - "1883:1883"
 #      - "9001:9001"
@@ -25,18 +24,18 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      network: host
-    network_mode: host
     container_name: topst
 #    env_file:
 #      - .env
     environment:
-      - MQTT_HOST=127.0.0.1
+#      - MQTT_HOST=127.0.0.1
+      - MQTT_HOST=mosquitto
       - MQTT_PORT=1883
       # - MQTT_USER=server
       # - MQTT_PASS=server_pass
     volumes:
       - ./app:/app/app
+      - ./data:/app/data
     ports:
       - "8000:8000"            #
     depends_on:
