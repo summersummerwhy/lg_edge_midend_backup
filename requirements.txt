@@ -4,6 +4,7 @@ asyncio-mqtt==0.16.2
 paho-mqtt==1.6.1
 pydantic
 orjson
+python-dotenv
 
 numpy
 opencv-python

@@ -14,6 +14,11 @@ import uvicorn
 # === MQTT (asyncio-mqtt) ===
 from asyncio_mqtt import Client as MQTTClient, MqttError
 
+from ai.main import track_image, track_image_by_path
+from dotenv import load_dotenv
+
+
+load_dotenv()
 # ================== 환경 ==================
 MQTT_HOST = os.getenv("MQTT_HOST", "mosquitto")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
@@ -184,6 +189,7 @@ async def handle_camera(msg: Envelope):
     }
     print(f"[CAMERA] {msg.device} seq={msg.seq} -> {fpath.name} ({len(jpg)}B)")
 
+    payloads = track_image_by_path(fpath)
     # ai_result = infer_image(fpath)
     # print(f"[AI][CAMERA] {msg.device} -> {ai_result}")
 

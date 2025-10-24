@@ -64,6 +64,14 @@ def track_image(image, image_format):
 
     return payloads
 
+def track_image_by_path(image_path, image_format = "jpg"):
+    # 이미지 읽기
+    image = cv2.imread(image_path)
+    if image is None:
+        raise ValueError(f"Failed to read image from {image_path}")
+    track_image(image, image_format)
+
+
 
 if __name__ == "__main__":
     DEVICE = "topst"
