@@ -335,7 +335,7 @@ def _save_image_file(device, ts, seq, jpg):
 
 async def route_message(topic: str, payload: bytes):
     try:
-        print(payload)
+        #print(payload)
         env = Envelope(**json.loads(payload.decode()))
     except Exception as e:
         print(f"[MQTT] invalid envelope: {e}")
