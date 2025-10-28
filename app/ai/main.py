@@ -1,11 +1,11 @@
-from ai.inference import inference
+from .inference import inference
 
-import ai.utils as utils
-import ai.mqtt as mqtt
+from . import utils
 
 import cv2
 
-from ai.tracker import tracker
+from .tracker import tracker
+
 
 def visualize(image, box, color):
     x1, y1, x2, y2 = box
@@ -25,7 +25,9 @@ def track_image(image, image_format):
     # 셋 다 {"box": xyxy, "track_id": track_id} 형태
     # track_list는 dict, old/new_track_ids는 list
 
-    print(f"Tracked {len(track_list)} datas, -{len(old_track_ids)} +{len(new_track_ids)}")
+    print(
+        f"Tracked {len(track_list)} datas, -{len(old_track_ids)} +{len(new_track_ids)}"
+    )
 
     payloads = []
 
@@ -67,13 +69,13 @@ def track_image(image, image_format):
 
     return payloads
 
-def track_image_by_path(image_path, image_format = "jpg"):
+
+def track_image_by_path(image_path, image_format="jpg"):
     # 이미지 읽기
     image = cv2.imread(image_path)
     if image is None:
         raise ValueError(f"Failed to read image from {image_path}")
     return track_image(image, image_format)
-
 
 
 # if __name__ == "__main__":

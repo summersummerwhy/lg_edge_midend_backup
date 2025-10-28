@@ -34,8 +34,7 @@ services:
       # - MQTT_USER=server
       # - MQTT_PASS=server_pass
     volumes:
-      - ./app:/app/app
-      - ./data:/app/data
+      - ./:/app
     ports:
       - "8000:8000"            #
     depends_on:
