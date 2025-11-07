@@ -5,7 +5,7 @@ AI 모델 설정
 
 # ===== 감지 모델 선택 =====
 # 옵션: "yolov8n", "yolo11n", "yolo_nano", "mobilenet_ssd"
-DETECTOR = "mobilenet_ssd"
+DETECTOR = "yolov8n"
 
 # ===== 추적 모델 선택 =====
 # 옵션: "bytetrack", "botsort", "deepsort"
