@@ -2,7 +2,7 @@ import base64
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict, Any
 
 import numpy as np
 import cv2
@@ -20,9 +20,11 @@ from .state import (
     camera_chunks,
     ChunkState,
 )
+from .mqtt.publisher import publish_mqtt
 
 log = logging.getLogger(__name__)
-
+raw_camera_headers: Dict[Tuple[str, int], Dict[str, Any]] = {}
+raw_camera_chunks: Dict[Tuple[str, int], Dict[int, bytes]] = {}
 
 def _save_image_file(device: str, ts: int, seq: int, jpg: bytes) -> Path:
     day = datetime.utcfromtimestamp(ts / 1000).strftime("%Y%m%d")
@@ -238,3 +240,120 @@ async def handle_camera(msg: Envelope, publish_cb, *, save_image: bool = True) -
             )
     except Exception as e:
         log.exception("[AI][CAMERA] error: %s", e)
+
+
+async def handle_camera_header_raw(env: Envelope) -> None:
+    key = (env.device, env.seq)
+    raw_camera_headers[key] = {
+        "ts": env.ts,
+        **env.payload,
+    }
+    await _try_assemble_raw(env.device, env.seq)
+
+async def handle_camera_chunk_raw(
+    *,
+    device: str,
+    seq: int,
+    idx: int,
+    chunk_bytes: bytes,
+    save_image: bool = True,
+) -> None:
+    key = (device, seq)
+    if key not in raw_camera_chunks:
+        raw_camera_chunks[key] = {}
+    if idx not in raw_camera_chunks[key]:
+        raw_camera_chunks[key][idx] = chunk_bytes
+
+    await _try_assemble_raw(device, seq, save_image=save_image)
+
+
+async def _try_assemble_raw(device: str, seq: int, *, save_image: bool = True) -> None:
+    key = (device, seq)
+    header = raw_camera_headers.get(key)
+    chunks = raw_camera_chunks.get(key)
+    if not header or not chunks:
+        return
+
+    total_chunks = header.get("chunks")
+    total_size = header.get("size")
+    width = header.get("width")
+    height = header.get("height")
+    ts = header.get("ts")
+
+    if total_chunks is None or len(chunks) < total_chunks:
+        return
+
+    parts = []
+    for i in range(total_chunks):
+        part = chunks.get(i)
+        if part is None:
+            return
+        parts.append(part)
+    jpg_bytes = b"".join(parts)
+
+    fpath = None
+    if save_image:
+        fpath = _save_image_file(device, ts, seq, jpg_bytes)
+        log.info(
+            "[CAMERA-RAW] %s seq=%s saved %s (%dB, %d chunks)",
+            device,
+            seq,
+            fpath.name,
+            len(jpg_bytes),
+            total_chunks,
+        )
+
+    # latest 갱신
+    from .state import latest
+    latest_payload = {"format": "jpeg", "width": width, "height": height}
+    if fpath is not None:
+        latest_payload["file"] = str(fpath)
+    latest[(device, "camera")] = {
+        "device": device,
+        "ts": ts,
+        "seq": seq,
+        "payload": latest_payload,
+        "ts_iso": ts_to_iso(ts),
+    }
+
+    # AI 호출
+    try:
+        if save_image and fpath is not None:
+            payloads = track_image_by_path(fpath)
+        else:
+            import numpy as np, cv2
+            arr = np.frombuffer(jpg_bytes, dtype=np.uint8)
+            image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if image is None:
+                log.error("[AI][CAMERA] %s seq=%s JPEG decode 실패", device, seq)
+                return
+            payloads = track_image(image, "jpg")
+
+        if not payloads:
+            log.info("[AI][CAMERA] %s -> no payloads", device)
+            return
+
+        topic = f"{DEVICE_NAMESPACE}/{DEVICE_NAMESPACE}/ai"
+
+        for payload in payloads:
+            ai_msg = {
+                "device": device,
+                "ts": ts,
+                "seq": seq,
+                "payload": payload,
+            }
+            await publish_mqtt(topic, ai_msg)
+            log.debug(
+                "[AI-PUB] %s (%s, track_id=%s)",
+                topic,
+                payload.get("type"),
+                payload.get("track_id"),
+            )
+
+    except Exception as e:
+        log.exception("[AI][CAMERA] error: %s", e)
+
+
+    # 메모리 정리
+    raw_camera_headers.pop(key, None)
+    raw_camera_chunks.pop(key, None)
