@@ -1,93 +1,120 @@
-# Topst D3
+# AI 모델 최적화 - 모듈화 및 벤치마크
 
-## 1.필수 패키지 설치
-sudo apt update
-sudo apt install -y python3 python3-venv python3-pip mosquitto mosquitto-clients
+기존 YOLO11n + BoT-SORT를 모듈화하고, 여러 조합을 테스트할 수 있는 구조
 
-## 2. Mosquitto 설정
-(1) 프로젝트의 설정 파일 복사
+---
 
-프로젝트 폴더 내의 mosquitto/ 디렉토리를 시스템 경로로 복사합니다.
+## 🎯 목표
 
-sudo cp -r ./mosquitto /etc/mosquitto/
-sudo chown -R mosquitto:mosquitto /etc/mosquitto
+1. **속도 개선**: 더 빠른 모델로 FPS 향상
+2. **정확도 유지**: 사람 감지 + 추적 정확도 유지
+3. **유연성**: 모델 조합을 쉽게 교체 가능
+4. **벤치마크**: 자동으로 성능 비교
 
-(2) Mosquitto 서비스 재시작
-sudo systemctl restart mosquitto
+---
 
-(3) 서비스 상태 확인
-sudo systemctl status mosquitto
+## 📊 지원 모델
+
+### 감지 모델 (Detection)
+- **YOLO11n** (현재) - 정확하고 빠름
+- **YOLOv8n** - YOLO11n과 비슷, 약간 더 빠름
+- **MobileNet-SSD** - 가장 빠름, 정확도 낮음
+
+### 추적 모델 (Tracking)
+- **BoT-SORT** (현재) - 가장 정확, 느림
+- **ByteTrack** - BoT-SORT보다 2배 빠름, 정확도 비슷
+- **DeepSORT** - 중간 성능
+
+---
+
+## 🚀 사용 방법
+
+### 1️⃣ 모델 선택
+
+`app/ai/ai_config.py` 파일 수정:
+
+```python
+# 감지 모델 선택
+DETECTOR = "yolov8n"  # yolo11n / yolov8n / mobilenet_ssd
+
+# 추적 모델 선택
+TRACKER = "bytetrack"  # botsort / bytetrack / deepsort
+```
+
+### 2️⃣ 기존 코드 그대로 사용
+
+```python
+from app.ai.main import track_image_by_path, track_image
+
+# 파일 경로로 추적
+payloads = track_image_by_path(Path("image.jpg"))
+
+# 이미지 배열로 추적
+image = cv2.imread("image.jpg")
+payloads = track_image(image, "jpg")
+```
+
+**기존 코드 수정 없이 바로 사용 가능!** ✅
+
+### 3️⃣ 벤치마크 실행
+
+```bash
+# 모든 조합 테스트
+python benchmark/benchmark.py --frames 100
+
+# 특정 조합만 테스트
+python benchmark/benchmark.py --detector yolov8n --tracker bytetrack --frames 50
+```
+
+---
+
+## 📈 예상 성능
+
+### FPS 비교 (예상)
+
+| Detector | Tracker | 예상 FPS | 정확도 |
+|----------|---------|----------|--------|
+| YOLO11n | BoT-SORT | 10-15 | ⭐⭐⭐⭐⭐ |
+| **YOLOv8n** | **ByteTrack** | **20-25** ⭐ | ⭐⭐⭐⭐ |
+| YOLOv8n | DeepSORT | 18-22 | ⭐⭐⭐⭐ |
+| MobileNet-SSD | ByteTrack | 25-30 | ⭐⭐⭐ |
 
 
-정상적으로 실행 중이라면 다음과 같은 로그가 표시됩니다:
-
-Active: active (running)
-
-## 3. Python 환경 설정
-(1) 가상환경 생성 및 활성화
-cd ~/topst   # 프로젝트 루트 경로로 이동
-python3 -m venv venv
-source venv/bin/activate
-
-(2) 의존성 설치
-pip install --upgrade pip
-pip install fastapi uvicorn asyncio-mqtt pydantic
+---
 
 
-또는 requirements.txt가 있다면:
+## 📊 벤치마크 결과 예시
 
-pip install -r requirements.txt
+```
+📊 BENCHMARK SUMMARY
+================================================================================
 
-## 4. 환경 변수 설정
+Detector        Tracker         Avg FPS    Min FPS    Max FPS
+----------------------------------------------------------------------
+yolov8n         bytetrack         24.32      18.20      32.10
+  ⭐ FASTEST!
+yolov8n         deepsort          21.45      16.80      28.30
+yolo11n         bytetrack         18.67      14.20      24.50
+yolo11n         botsort           12.34       9.10      16.20
+```
 
-TOPST 서버가 MQTT 브로커에 접근할 수 있도록 환경변수를 설정합니다.
+---
 
-export MQTT_HOST=localhost
-export MQTT_PORT=1883
-# export MQTT_USER=server
-# export MQTT_PASS=server_pass
+## 🎯 다음 단계
 
-## 5. 서버 실행
+### Phase 1: 속도 개선 (현재)
+- [x] 모듈화
+- [x] 여러 모델 추가
+- [x] 벤치마크 도구
+- [ ] 실제 TOPST에서 테스트
 
-FastAPI 개발 서버를 실행합니다.
+### Phase 2: 정확도 개선 (나중)
+- [ ] 얼굴 인식 추가 (MobileFaceNet)
+- [ ] 세부 사물 인식 (EfficientDet-Lite)
 
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+### Phase 3: 최적화
+- [ ] 모델 경량화 (양자화)
+- [ ] 병렬 처리 (멀티 코어 활용)
+- [ ] 프레임 스킵 전략
 
-실행 확인
-
-API 문서: http://localhost:8000/docs
-
-MQTT 브로커 연결 테스트:
-
-mosquitto_sub -h localhost -t "#" -v
-mosquitto_pub -h localhost -t "test/topic" -m "Hello, TOPST!"
-
-## 6. 서버 종료
-deactivate     # Python 가상환경 종료
-sudo systemctl stop mosquitto
-
-## 프로젝트 구조 예시
-topst/
- ├─ app/
- │   ├─ main.py
- │   └─ ...
- ├─ data/
- ├─ mosquitto/
- │   ├─ mosquitto.conf
- │   ├─ passwd
- │   └─ acl
- ├─ requirements.txt
- └─ README.md
-
-## 요약 명령어
-sudo apt install -y mosquitto mosquitto-clients python3 python3-venv python3-pip
-sudo cp -r ./mosquitto /etc/mosquitto/
-sudo chown -R mosquitto:mosquitto /etc/mosquitto
-sudo systemctl restart mosquitto
-cd topst
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-export MQTT_HOST=localhost
-export MQTT_PORT=1883
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+---
