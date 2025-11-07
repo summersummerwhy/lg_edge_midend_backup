@@ -1,3 +1,4 @@
+# mqtt
 fastapi
 uvicorn[standard]
 asyncio-mqtt==0.16.2
@@ -6,6 +7,7 @@ pydantic
 orjson
 python-dotenv
 
+# AI
 numpy
 opencv-python
 torch
