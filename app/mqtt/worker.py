@@ -16,44 +16,77 @@ from ..config import (
     SAVE_CAMERA_FILES,
 )
 from ..models import Envelope
-from ..handlers import handle_motion, handle_audio, handle_camera
-from .publisher import publish_mqtt
+from ..handlers import (
+    handle_motion,
+    handle_audio,
+    handle_camera_header_raw,
+    handle_camera_chunk_raw,
+)
+import re
+
 
 log = logging.getLogger(__name__)
+CHUNK_TOPIC_RE = re.compile(rf"^{DEVICE_NAMESPACE}/([^/]+)/camera/chunk/(\d+)/(\d+)$")
 
 
 async def route_message(topic: str, payload: bytes):
+    parts = topic.split("/")
+    if len(parts) < 3:
+        log.warning("[MQTT] bad topic: %s", topic)
+        return
+
+    ns = parts[0]
+    if ns != DEVICE_NAMESPACE:
+        return
+
+    device = parts[1]
+    kind = parts[2]
+
+    if kind == "camera" and len(parts) == 4 and parts[3] == "header":
+        try:
+            data = json.loads(payload.decode())
+        except Exception as e:
+            log.warning("[MQTT] invalid camera header json: %s", e)
+            return
+        env = Envelope(**data)
+        await handle_camera_header_raw(env)
+        return
+
+    m = CHUNK_TOPIC_RE.match(topic)
+    if m:
+        device = m.group(1)
+        seq = int(m.group(2))
+        idx = int(m.group(3))
+        await handle_camera_chunk_raw(
+            device=device,
+            seq=seq,
+            idx=idx,
+            chunk_bytes=payload,
+            save_image=SAVE_CAMERA_FILES,
+        )
+        return
+
     try:
         env = Envelope(**json.loads(payload.decode()))
     except Exception as e:
         log.warning("[MQTT] invalid envelope: %s", e)
         return
 
-    parts = topic.split("/")
-    if len(parts) < 3:
-        log.warning("[MQTT] bad topic: %s", topic)
-        return
-
-    ns, device_from_topic, kind = parts[0], parts[1], parts[2]
-    if ns != DEVICE_NAMESPACE:
-        log.debug("[MQTT] namespace mismatch: %s", topic)
-        return
-
     if kind == "motion":
         await handle_motion(env)
     elif kind == "audio":
         await handle_audio(env)
-    elif kind == "camera":
-        await handle_camera(env, publish_cb=publish_mqtt, save_image=SAVE_CAMERA_FILES)
     else:
         log.debug("[MQTT] unknown kind: %s", kind)
+
 
 
 async def mqtt_worker():
     topics = [
         f"{DEVICE_NAMESPACE}/+/motion",
         f"{DEVICE_NAMESPACE}/+/audio",
-        f"{DEVICE_NAMESPACE}/+/camera",
+        f"{DEVICE_NAMESPACE}/+/camera/header",
+        f"{DEVICE_NAMESPACE}/+/camera/chunk/#"
     ]
 
     backoff = 1
