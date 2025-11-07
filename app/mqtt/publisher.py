@@ -16,6 +16,7 @@ from ..state import mqtt_lock
 
 log = logging.getLogger(__name__)
 _mqtt_client: Optional[MQTTClient] = None
+seq_number = 0
 
 
 async def _connect_client() -> MQTTClient:

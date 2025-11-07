@@ -5,11 +5,11 @@ AI 모델 설정
 
 # ===== 감지 모델 선택 =====
 # 옵션: "yolov8n", "yolo11n", "mobilenet_ssd"
-DETECTOR = "yolov8n"
+DETECTOR = "yolo11n"
 
 # ===== 추적 모델 선택 =====
 # 옵션: "bytetrack", "botsort", "deepsort"
-TRACKER = "bytetrack"
+TRACKER = "deepsort"
 
 # ===== 모델 파일 경로 =====
 YOLO11N_PATH = "yolo11n.pt"
