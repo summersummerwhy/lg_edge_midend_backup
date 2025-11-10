@@ -8,6 +8,7 @@ import numpy as np
 import cv2
 
 from app.ai.main import track_image_by_path, track_image
+from app.dedup.main import process_alerts
 from .config import AUDIO_DIR, IMAGE_DIR, DEVICE_NAMESPACE, AUDIO_SAVE_INTERVAL
 from .models import Envelope, MotionPayload, AudioPayload, CameraPayload
 from .utils import ts_to_iso, safe_filename, save_wav_pcm16_mono
@@ -25,6 +26,7 @@ from .mqtt.publisher import publish_mqtt
 log = logging.getLogger(__name__)
 raw_camera_headers: Dict[Tuple[str, int], Dict[str, Any]] = {}
 raw_camera_chunks: Dict[Tuple[str, int], Dict[int, bytes]] = {}
+
 
 def _save_image_file(device: str, ts: int, seq: int, jpg: bytes) -> Path:
     day = datetime.utcfromtimestamp(ts / 1000).strftime("%Y%m%d")
@@ -223,20 +225,25 @@ async def handle_camera(msg: Envelope, publish_cb, *, save_image: bool = True) -
             log.info("[AI][CAMERA] %s -> no objects", msg.device)
             return
 
-        for payload in payloads:
-            ai_msg = {
+        alerts = [
+            {
                 "device": msg.device,
                 "ts": msg.ts,
                 "seq": msg.seq,
                 "payload": payload,
             }
+            for payload in payloads
+        ]
+        processed_alerts = process_alerts(alerts)
+
+        for alert in processed_alerts:
             topic = f"{DEVICE_NAMESPACE}/{DEVICE_NAMESPACE}/ai"
-            await publish_cb(topic, ai_msg)
+            await publish_cb(topic, alert)
             log.debug(
                 "[AI-PUB] %s (%s, track_id=%s)",
                 topic,
-                payload.get("type"),
-                payload.get("track_id"),
+                alert.get("payload").get("type"),
+                alert.get("payload").get("track_id"),
             )
     except Exception as e:
         log.exception("[AI][CAMERA] error: %s", e)
@@ -249,6 +256,7 @@ async def handle_camera_header_raw(env: Envelope) -> None:
         **env.payload,
     }
     await _try_assemble_raw(env.device, env.seq)
+
 
 async def handle_camera_chunk_raw(
     *,
@@ -305,6 +313,7 @@ async def _try_assemble_raw(device: str, seq: int, *, save_image: bool = True) -
 
     # latest 갱신
     from .state import latest
+
     latest_payload = {"format": "jpeg", "width": width, "height": height}
     if fpath is not None:
         latest_payload["file"] = str(fpath)
@@ -322,6 +331,7 @@ async def _try_assemble_raw(device: str, seq: int, *, save_image: bool = True) -
             payloads = track_image_by_path(fpath)
         else:
             import numpy as np, cv2
+
             arr = np.frombuffer(jpg_bytes, dtype=np.uint8)
             image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
             if image is None:
@@ -352,7 +362,6 @@ async def _try_assemble_raw(device: str, seq: int, *, save_image: bool = True) -
 
     except Exception as e:
         log.exception("[AI][CAMERA] error: %s", e)
-
 
     # 메모리 정리
     raw_camera_headers.pop(key, None)
