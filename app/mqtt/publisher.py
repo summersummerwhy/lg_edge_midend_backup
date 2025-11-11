@@ -28,7 +28,7 @@ async def _connect_client() -> MQTTClient:
         port=MQTT_PORT,
         username=MQTT_USER,
         password=MQTT_PASS,
-        client_id=MQTT_CLIENT_ID,
+        client_id=MQTT_CLIENT_ID + "-pub",
         keepalive=MQTT_KEEPALIVE,
     )
     await client.connect()
