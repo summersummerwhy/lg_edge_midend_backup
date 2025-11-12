@@ -50,8 +50,8 @@ def dedup(alerts):
         id_count = id_map.get(track_id, 0)
 
         if id_count >= MAX_ENTER_COUNT:
-            # continue # 원래 무시해야 하지만 테스트를 위해 priority 0 처리
-            alert["payload"]["priority"] = 0
+            # continue # 원래 무시해야 하지만 테스트를 위해 priority low 처리
+            alert["payload"]["priority"] = "low"
 
         """
         # 중복 입/퇴장 알림 무시
@@ -59,11 +59,11 @@ def dedup(alerts):
         expected_type = nxt_type.get(track_id, "enter")
 
         if alert_type != expected_type:
-            # continue # 원래 무시해야 하지만 테스트를 위해 priority 0 처리
-            alert["payload"]["priority"] = 0
+            # continue # 원래 무시해야 하지만 테스트를 위해 priority low 처리
+            alert["payload"]["priority"] = "low"
         """
 
-        if alert["payload"]["priority"] != 0:  # continue로 무시하면 필요없는 line
+        if alert["payload"]["priority"] != "low":  # continue로 무시하면 필요없는 line
             update_id_map(id_map, alert)
             # update_next_type(nxt_type, alert)
 
