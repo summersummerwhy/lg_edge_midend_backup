@@ -104,149 +104,150 @@ async def handle_audio(msg: Envelope) -> None:
         audio_start_ts[device] = msg.ts
 
 
-async def handle_camera(msg: Envelope, publish_cb, *, save_image: bool = True) -> None:
-    """
-    save_image=True  → JPEG 파일 저장 후 track_image_by_path() 사용
-    save_image=False → JPEG 메모리 디코드 후 track_image() 사용 (파일 미저장)
-    """
-
-    # if is_duplicate(msg.device, "camera", msg.seq):
-    #     return
-
-    p = CameraPayload(**msg.payload)
-    width, height = p.width, p.height
-    jpg_bytes: Optional[bytes] = None
-    fpath: Optional[Path] = None
-
-    # (1) 단일 전송
-    if p.part is None:
-        if not p.data_b64:
-            log.warning("[CAMERA] %s seq=%s no data_b64", msg.device, msg.seq)
-            return
-        jpg_bytes = base64.b64decode(p.data_b64)
-        if save_image:
-            fpath = _save_image_file(msg.device, msg.ts, msg.seq, jpg_bytes)
-            log.info("[CAMERA] %s seq=%s -> %s", msg.device, msg.seq, fpath.name)
-
-    # (2) 청크 전송
-    else:
-        key: Tuple[str, int] = (msg.device, msg.seq)
-        st = camera_chunks.get(key)
-        if st is None:
-            st = ChunkState(start_ts=msg.ts)
-            camera_chunks[key] = st
-
-        if p.total:
-            st.set_total(p.total)
-        if p.idx is None:
-            log.warning("[CAMERA] %s seq=%s missing idx", msg.device, msg.seq)
-            return
-        if p.data_b64:
-            st.add(p.idx, p.data_b64)
-
-        if (p.part == "end") or st.complete():
-            missing = []
-            if st.total:
-                have = set(st.received)
-                missing = [i for i in range(st.total) if i not in have]
-
-            if missing:
-                ordered = [st.parts[i] for i in sorted(st.received)]
-                jpg_bytes = base64.b64decode("".join(ordered))
-                if save_image:
-                    fpath = _save_image_file(
-                        msg.device, st.start_ts, msg.seq, jpg_bytes
-                    )
-                log.warning(
-                    "[CAMERA] %s seq=%s partial (%dB, %d/%s) missing=%s",
-                    msg.device,
-                    msg.seq,
-                    len(jpg_bytes),
-                    len(st.received),
-                    st.total,
-                    missing[:5],
-                )
-            else:
-                if st.total is None:
-                    ordered = [st.parts[i] for i in sorted(st.received)]
-                else:
-                    ordered = [st.parts[i] for i in range(st.total)]
-                jpg_bytes = base64.b64decode("".join(ordered))
-                if save_image:
-                    fpath = _save_image_file(
-                        msg.device, st.start_ts, msg.seq, jpg_bytes
-                    )
-                log.info(
-                    "[CAMERA] %s seq=%s full (%dB, %d chunks)",
-                    msg.device,
-                    msg.seq,
-                    len(jpg_bytes),
-                    len(ordered),
-                )
-            camera_chunks.pop(key, None)
-        else:
-            return
-
-    # latest 캐시
-    latest_payload = {"format": "jpeg", "width": width, "height": height}
-    if fpath is not None:
-        latest_payload["file"] = str(fpath)
-
-    latest[(msg.device, "camera")] = {
-        "device": msg.device,
-        "ts": msg.ts,
-        "seq": msg.seq,
-        "payload": latest_payload,
-        "ts_iso": ts_to_iso(msg.ts),
-    }
-
-    # AI 호출
-    try:
-        if save_image:
-            payloads = track_image_by_path(fpath)
-        else:
-            if jpg_bytes is None:
-                log.warning(
-                    "[AI][CAMERA] %s seq=%s no jpg bytes to process",
-                    msg.device,
-                    msg.seq,
-                )
-                return
-            arr = np.frombuffer(jpg_bytes, dtype=np.uint8)
-            image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-            if image is None:
-                log.error(
-                    "[AI][CAMERA] %s seq=%s failed to decode JPEG", msg.device, msg.seq
-                )
-                return
-            payloads = track_image(image, "jpg")
-
-        if not payloads:
-            log.info("[AI][CAMERA] %s -> no objects", msg.device)
-            return
-
-        alerts = [
-            {
-                "device": msg.device,
-                "ts": msg.ts,
-                "seq": msg.seq,
-                "payload": payload,
-            }
-            for payload in payloads
-        ]
-        processed_alerts = process_alerts(alerts)
-
-        for alert in processed_alerts:
-            topic = f"{DEVICE_NAMESPACE}/{DEVICE_NAMESPACE}/ai"
-            await publish_cb(topic, alert)
-            log.debug(
-                "[AI-PUB] %s (%s, track_id=%s)",
-                topic,
-                alert.get("payload").get("type"),
-                alert.get("payload").get("track_id"),
-            )
-    except Exception as e:
-        log.exception("[AI][CAMERA] error: %s", e)
+# async def handle_camera(msg: Envelope, publish_cb, *, save_image: bool = True) -> None:
+#     """
+#     save_image=True  → JPEG 파일 저장 후 track_image_by_path() 사용
+#     save_image=False → JPEG 메모리 디코드 후 track_image() 사용 (파일 미저장)
+#     """
+#
+#     # if is_duplicate(msg.device, "camera", msg.seq):
+#     #     return
+#
+#     p = CameraPayload(**msg.payload)
+#     width, height = p.width, p.height
+#     jpg_bytes: Optional[bytes] = None
+#     fpath: Optional[Path] = None
+#
+#     # (1) 단일 전송
+#     if p.part is None:
+#         if not p.data_b64:
+#             log.warning("[CAMERA] %s seq=%s no data_b64", msg.device, msg.seq)
+#             return
+#         jpg_bytes = base64.b64decode(p.data_b64)
+#         if save_image:
+#             fpath = _save_image_file(msg.device, msg.ts, msg.seq, jpg_bytes)
+#             log.info("[CAMERA] %s seq=%s -> %s", msg.device, msg.seq, fpath.name)
+#
+#     # (2) 청크 전송
+#     else:
+#         key: Tuple[str, int] = (msg.device, msg.seq)
+#         st = camera_chunks.get(key)
+#         if st is None:
+#             st = ChunkState(start_ts=msg.ts)
+#             camera_chunks[key] = st
+#
+#         if p.total:
+#             st.set_total(p.total)
+#         if p.idx is None:
+#             log.warning("[CAMERA] %s seq=%s missing idx", msg.device, msg.seq)
+#             return
+#         if p.data_b64:
+#             st.add(p.idx, p.data_b64)
+#
+#         if (p.part == "end") or st.complete():
+#             missing = []
+#             if st.total:
+#                 have = set(st.received)
+#                 missing = [i for i in range(st.total) if i not in have]
+#
+#             if missing:
+#                 ordered = [st.parts[i] for i in sorted(st.received)]
+#                 jpg_bytes = base64.b64decode("".join(ordered))
+#                 if save_image:
+#                     fpath = _save_image_file(
+#                         msg.device, st.start_ts, msg.seq, jpg_bytes
+#                     )
+#                 log.warning(
+#                     "[CAMERA] %s seq=%s partial (%dB, %d/%s) missing=%s",
+#                     msg.device,
+#                     msg.seq,
+#                     len(jpg_bytes),
+#                     len(st.received),
+#                     st.total,
+#                     missing[:5],
+#                 )
+#             else:
+#                 if st.total is None:
+#                     ordered = [st.parts[i] for i in sorted(st.received)]
+#                 else:
+#                     ordered = [st.parts[i] for i in range(st.total)]
+#                 jpg_bytes = base64.b64decode("".join(ordered))
+#                 if save_image:
+#                     fpath = _save_image_file(
+#                         msg.device, st.start_ts, msg.seq, jpg_bytes
+#                     )
+#                 log.info(
+#                     "[CAMERA] %s seq=%s full (%dB, %d chunks)",
+#                     msg.device,
+#                     msg.seq,
+#                     len(jpg_bytes),
+#                     len(ordered),
+#                 )
+#             camera_chunks.pop(key, None)
+#         else:
+#             return
+#
+#     # latest 캐시
+#     latest_payload = {"format": "jpeg", "width": width, "height": height}
+#     if fpath is not None:
+#         latest_payload["file"] = str(fpath)
+#
+#     latest[(msg.device, "camera")] = {
+#         "device": msg.device,
+#         "ts": msg.ts,
+#         "seq": msg.seq,
+#         "payload": latest_payload,
+#         "ts_iso": ts_to_iso(msg.ts),
+#     }
+#
+#     # AI 호출
+#     try:
+#         if save_image:
+#             payloads = track_image_by_path(fpath)
+#         else:
+#             if jpg_bytes is None:
+#                 log.warning(
+#                     "[AI][CAMERA] %s seq=%s no jpg bytes to process",
+#                     msg.device,
+#                     msg.seq,
+#                 )
+#                 return
+#             arr = np.frombuffer(jpg_bytes, dtype=np.uint8)
+#             image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+#             if image is None:
+#                 log.error(
+#                     "[AI][CAMERA] %s seq=%s failed to decode JPEG", msg.device, msg.seq
+#                 )
+#                 return
+#             payloads = track_image(image, "jpg")
+#
+#         if not payloads:
+#             log.info("[AI][CAMERA] %s -> no objects", msg.device)
+#             return
+#
+#         alerts = [
+#             {
+#                 "device": msg.device,
+#                 "ts": msg.ts,
+#                 "seq": msg.seq,
+#                 "payload": payload,
+#             }
+#             for payload in payloads
+#         ]
+#         processed_alerts = process_alerts(alerts)
+#
+#         topic = f"{DEVICE_NAMESPACE}/{DEVICE_NAMESPACE}/ai"
+#
+#         for alert in processed_alerts:
+#             await publish_cb(topic, alert)
+#             log.debug(
+#                 "[AI-PUB] %s (%s, track_id=%s)",
+#                 topic,
+#                 alert.get("payload").get("type"),
+#                 alert.get("payload").get("track_id"),
+#             )
+#     except Exception as e:
+#         log.exception("[AI][CAMERA] error: %s", e)
 
 
 async def handle_camera_header_raw(env: Envelope) -> None:
@@ -330,8 +331,13 @@ async def _try_assemble_raw(device: str, seq: int, *, save_image: bool = True) -
         if save_image and fpath is not None:
             payloads = track_image_by_path(fpath)
         else:
-            import numpy as np, cv2
-
+            if jpg_bytes is None:
+                log.warning(
+                    "[AI][CAMERA] %s seq=%s no jpg bytes to process",
+                    device,
+                    seq,
+                )
+                return
             arr = np.frombuffer(jpg_bytes, dtype=np.uint8)
             image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
             if image is None:
@@ -343,21 +349,26 @@ async def _try_assemble_raw(device: str, seq: int, *, save_image: bool = True) -
             log.info("[AI][CAMERA] %s -> no payloads", device)
             return
 
-        topic = f"{DEVICE_NAMESPACE}/{DEVICE_NAMESPACE}/ai"
-
-        for payload in payloads:
-            ai_msg = {
+        alerts = [
+            {
                 "device": device,
                 "ts": ts,
                 "seq": seq,
                 "payload": payload,
             }
-            await publish_mqtt(topic, ai_msg)
+            for payload in payloads
+        ]
+        processed_alerts = process_alerts(alerts)
+
+        topic = f"{DEVICE_NAMESPACE}/{DEVICE_NAMESPACE}/ai"
+
+        for alert in processed_alerts:
+            await publish_mqtt(topic, alert)
             log.debug(
                 "[AI-PUB] %s (%s, track_id=%s)",
                 topic,
-                payload.get("type"),
-                payload.get("track_id"),
+                alert.get("payload").get("type"),
+                alert.get("payload").get("track_id"),
             )
 
     except Exception as e:

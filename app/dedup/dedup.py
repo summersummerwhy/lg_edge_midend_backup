@@ -65,7 +65,7 @@ def dedup(alerts):
 
         if alert["payload"]["priority"] != 0:  # continue로 무시하면 필요없는 line
             update_id_map(id_map, alert)
-            update_next_type(nxt_type, alert)
+            # update_next_type(nxt_type, alert)
 
         deduped_alerts.append(alert)
 

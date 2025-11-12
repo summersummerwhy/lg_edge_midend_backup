@@ -1,6 +1,10 @@
 from .dedup import dedup
 from .suppression import suppression
 
+import logging
+
+log = logging.getLogger(__name__)
+
 
 def process_alerts(alerts):
     # 보낼 알림이 없는 경우 처리 X
@@ -9,11 +13,18 @@ def process_alerts(alerts):
 
     alerts = sorted(alerts, key=lambda x: x["ts"])
 
-    # process
-    processed_alerts = suppression(alerts)
-    processed_alerts = dedup(processed_alerts)
+    log.info(f"[DEDUP] Processing {len(alerts)} alerts")
 
-    return processed_alerts
+    # process
+    alerts = suppression(alerts)
+
+    log.info(f"[DEDUP] Alerts after suppression: {len(alerts)} alerts")
+
+    alerts = dedup(alerts)
+
+    log.info(f"[DEDUP] Alerts after deduplication: {len(alerts)} alerts")
+
+    return alerts
 
 
 if __name__ == "__main__":
