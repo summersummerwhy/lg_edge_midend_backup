@@ -326,6 +326,38 @@ async def _try_assemble_raw(device: str, seq: int, *, save_image: bool = True) -
         "ts_iso": ts_to_iso(ts),
     }
 
+    # 카메라 프레임 전송
+    try:
+        if jpg_bytes is None:
+            log.warning(
+                "[AI][CAMERA] %s seq=%s no jpg bytes to process",
+                device,
+                seq,
+            )
+            return
+
+        jpg_b64 = base64.b64encode(jpg_bytes).decode("utf-8")
+        img_format = "jpg"
+
+        topic = f"{DEVICE_NAMESPACE}/{DEVICE_NAMESPACE}/camera"
+
+        await publish_mqtt(
+            topic,
+            {
+                "device": device,
+                "ts": ts,
+                "seq": seq,
+                "payload": {
+                    "format": img_format,
+                    "width": width,
+                    "height": height,
+                    "data": jpg_b64,
+                },
+            },
+        )
+    except Exception as e:
+        log.exception("[AI][CAMERA] Publish camera error: %s", e)
+
     # AI 호출
     try:
         if save_image and fpath is not None:
@@ -370,9 +402,8 @@ async def _try_assemble_raw(device: str, seq: int, *, save_image: bool = True) -
                 alert.get("payload").get("type"),
                 alert.get("payload").get("track_id"),
             )
-
     except Exception as e:
-        log.exception("[AI][CAMERA] error: %s", e)
+        log.exception("[AI][CAMERA] Publish AI error: %s", e)
 
     # 메모리 정리
     raw_camera_headers.pop(key, None)
