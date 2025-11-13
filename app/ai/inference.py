@@ -1,33 +1,198 @@
-from ultralytics import YOLO
+"""
+통합 Inference 모듈
+Detector + Tracker 조합
+"""
 
-model = YOLO("yolo11n.pt")
+import time
+import logging
+import numpy as np
+from typing import List, Dict, Optional
+from pathlib import Path
+import cv2
+
+from .detectors import get_detector, BaseDetector
+from .trackers import get_tracker, BaseTracker
+from .ai_config import DETECTOR, TRACKER, CONFIDENCE_THRESHOLD, BENCHMARK_MODE
+
+log = logging.getLogger(__name__)
 
 
-# image should be a path, PIL image, OpenCV image, numpy array, or torch tensor
-#
-# path: str
-#     e.g. image = "image.jpg"
-# PIL image: PIL.Image with HWC + RGB
-#     e.g. from PIL import Image; image = Image.open("image.jpg")
-# OpenCV image: np.ndarray with HWC + BGR (0~255)
-#     e.g. import cv2; image = cv2.imread("image.jpg")
-# numpy array: np.ndarray with HWC + BGR (0~255)
-#     e.g. import numpy as np; image = np.zeros((640, 1280, 3))
-# torch tensor: torch.Tensor with BCHW + RGB (0~1)
-#     e.g. import torch; image = torch.zeros(16, 3, 320, 640)
-def inference(image):
-    result = model.track(image, persist=True)[0]
+class AIInference:
+    """
+    AI 추론 파이프라인
+    Detector + Tracker 조합
+    """
 
-    human_results = []
+    def __init__(self, detector_name: str = None, tracker_name: str = None):
+        """
+        Args:
+            detector_name: 감지 모델 이름 (None이면 config에서 로드)
+            tracker_name: 추적 모델 이름 (None이면 config에서 로드)
+        """
+        self.detector_name = detector_name or DETECTOR
+        self.tracker_name = tracker_name or TRACKER
+        
+        log.info(f"[AI] Initializing {self.detector_name} + {self.tracker_name}")
+        
+        # 모델 로드
+        self.detector: BaseDetector = get_detector(
+            self.detector_name, 
+            confidence=CONFIDENCE_THRESHOLD
+        )
+        self.tracker: BaseTracker = get_tracker(self.tracker_name)
+        
+        # 워밍업
+        self.detector.warmup()
+        
+        # 이전 track 상태 (입장/퇴장 감지용)
+        self.previous_tracks = {}  # {track_id: box}
+        
+        # FPS 측정
+        self.fps_history = []
+        
+        log.info(f"[AI] Ready: {self.detector_name} + {self.tracker_name}")
 
-    if result.boxes and result.boxes.is_track:
-        boxes = result.boxes.xyxy.int().cpu().tolist()
-        class_ids = result.boxes.cls.int().cpu().tolist()
-        track_ids = result.boxes.id.int().cpu().tolist()
+    def process_image(self, image: np.ndarray) -> List[Dict]:
+        """
+        이미지 처리 (Detection + Tracking)
+        
+        Args:
+            image: OpenCV 이미지 (HWC, BGR)
+        
+        Returns:
+            추적 결과 리스트
+            [
+                {
+                    "box": [x1, y1, x2, y2],
+                    "track_id": 1,
+                    "confidence": 0.95
+                },
+                ...
+            ]
+        """
+        start_time = time.time()
+        
+        # 1. Detection
+        detections = self.detector.detect(image)
+        
+        # 2. Tracking
+        # BoT-SORT는 이미지 필요
+        if self.tracker_name == "botsort":
+            tracks = self.tracker.update(detections, image=image)
+        else:
+            tracks = self.tracker.update(detections)
+        
+        # FPS 측정
+        elapsed = time.time() - start_time
+        fps = 1.0 / elapsed if elapsed > 0 else 0
+        
+        if BENCHMARK_MODE:
+            self.fps_history.append(fps)
+            if len(self.fps_history) % 10 == 0:
+                avg_fps = sum(self.fps_history[-10:]) / 10
+                log.info(f"[BENCHMARK] FPS: {fps:.2f} (avg: {avg_fps:.2f})")
+        
+        return tracks
 
-        # Filter only person class
-        for box, class_id, track_id in zip(boxes, class_ids, track_ids):
-            if class_id == 0:  # person class
-                human_results.append({"box": box, "track_id": track_id})
+    def detect_enter_exit(self, tracks: List[Dict]) -> Dict:
+        """
+        입장/퇴장 감지
+        
+        Args:
+            tracks: process_image() 결과
+        
+        Returns:
+            {
+                "entered": [track_id, ...],  # 새로 나타난 ID
+                "exited": [track_id, ...],   # 사라진 ID
+                "current": {track_id: box}   # 현재 추적 중
+            }
+        """
+        current_ids = {t["track_id"] for t in tracks}
+        previous_ids = set(self.previous_tracks.keys())
+        
+        entered = list(current_ids - previous_ids)
+        exited = list(previous_ids - current_ids)
+        
+        # 현재 상태 저장
+        current_tracks = {t["track_id"]: t["box"] for t in tracks}
+        self.previous_tracks = current_tracks
+        
+        return {
+            "entered": entered,
+            "exited": exited,
+            "current": current_tracks
+        }
 
-    return human_results
+    def get_fps_stats(self) -> Dict:
+        """
+        FPS 통계 반환
+        """
+        if not self.fps_history:
+            return {"avg": 0, "min": 0, "max": 0}
+        
+        return {
+            "avg": sum(self.fps_history) / len(self.fps_history),
+            "min": min(self.fps_history),
+            "max": max(self.fps_history),
+            "count": len(self.fps_history)
+        }
+
+    def reset(self):
+        """
+        추적 상태 초기화
+        """
+        self.tracker.reset()
+        self.previous_tracks.clear()
+        self.fps_history.clear()
+        log.info("[AI] Reset complete")
+
+
+# 전역 인스턴스 (싱글톤)
+_ai_instance: Optional[AIInference] = None
+
+
+def get_ai_instance(detector: str = None, tracker: str = None) -> AIInference:
+    """
+    AI 인스턴스 반환 (싱글톤)
+    """
+    global _ai_instance
+    
+    if _ai_instance is None:
+        _ai_instance = AIInference(detector, tracker)
+    
+    return _ai_instance
+
+
+def process_image_file(image_path: Path) -> List[Dict]:
+    """
+    이미지 파일 처리
+    
+    Args:
+        image_path: 이미지 파일 경로
+    
+    Returns:
+        추적 결과
+    """
+    ai = get_ai_instance()
+    image = cv2.imread(str(image_path))
+    
+    if image is None:
+        log.error(f"[AI] Failed to load image: {image_path}")
+        return []
+    
+    return ai.process_image(image)
+
+
+def process_image_array(image: np.ndarray) -> List[Dict]:
+    """
+    이미지 배열 처리
+    
+    Args:
+        image: OpenCV 이미지 (HWC, BGR)
+    
+    Returns:
+        추적 결과
+    """
+    ai = get_ai_instance()
+    return ai.process_image(image)

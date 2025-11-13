@@ -9,7 +9,7 @@ sudo apt install -y python3 python3-venv python3-pip mosquitto mosquitto-clients
 
 프로젝트 폴더 내의 mosquitto/ 디렉토리를 시스템 경로로 복사합니다.
 
-sudo cp -r ./mosquitto /etc/mosquitto/
+sudo cp -r ./mosquitto /etc/
 sudo chown -R mosquitto:mosquitto /etc/mosquitto
 
 (2) Mosquitto 서비스 재시작
