@@ -2,4 +2,9 @@
 data
 **/__pycache__
 *.pt
+<<<<<<< HEAD
 .venv
+=======
+venv
+venv/*
+>>>>>>> 870c8b9 (fix: gitignore)
