@@ -26,7 +26,7 @@ def get_detector(name: str, confidence: float = 0.5) -> BaseDetector:
     name = name.lower()
     
     if name == "yolov11n":
-        return YOLO11nDetector(confidence=confidence)
+        return YOLOv11nDetector(confidence=confidence)
     elif name == "yolov8n":
         return YOLOv8nDetector(confidence=confidence)
     elif name == "yolov5n":  
@@ -35,6 +35,8 @@ def get_detector(name: str, confidence: float = 0.5) -> BaseDetector:
         return RTDetrDetector(confidence=confidence)
     elif name == "effdetlite":
         return EfficientDetLiteDetector(confidence=confidence)
+    elif name == "yolonas":
+        return YOLONASDetector(confidence=confidence)
     else:
         raise ValueError(f"Unknown detector: {name}")
 
@@ -46,5 +48,6 @@ __all__ = [
     "YOLOv5nDetector",
     "RTDetrDetector",
     "EfficientDetLiteDetector",
+    "YOLONASDetector",
     "get_detector",
 ]
