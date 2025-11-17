@@ -4,9 +4,10 @@ Detector Factory
 """
 
 from .base import BaseDetector
-from .yolov11n import YOLO11nDetector
+from .yolov11n import YOLOv11nDetector
 from .yolov8n import YOLOv8nDetector
 from .yolov5n import YOLOv5nDetector
+from .rtdetr import RTDetrDetector 
 
 
 
@@ -29,14 +30,17 @@ def get_detector(name: str, confidence: float = 0.5) -> BaseDetector:
         return YOLOv8nDetector(confidence=confidence)
     elif name == "yolov5n":  
         return YOLOv5nDetector(confidence=confidence)
+    elif name == "rtdetr":                   
+        return RTDetrDetector(confidence=confidence)
     else:
         raise ValueError(f"Unknown detector: {name}")
 
 
 __all__ = [
     "BaseDetector",
-    "YOLO11nDetector",
+    "YOLOv11nDetector",
     "YOLOv8nDetector",
-    "MediaPipeDetector",
+    "YOLOv5nDetector",
+    "RTDetrDetector",
     "get_detector",
 ]

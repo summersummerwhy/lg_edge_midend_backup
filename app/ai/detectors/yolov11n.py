@@ -9,7 +9,7 @@ from typing import List, Dict
 from .base import BaseDetector
 
 
-class YOLO11nDetector(BaseDetector):
+class YOLOv11nDetector(BaseDetector):
     """
     YOLO11n 감지 모델
     """
