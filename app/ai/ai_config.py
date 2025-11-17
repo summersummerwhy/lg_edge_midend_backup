@@ -5,7 +5,7 @@ AI 모델 설정
 
 # ===== 감지 모델 선택 =====
 # 옵션: "yolov8n", "yolov11n", "yolov5n", "rtdetr"
-DETECTOR = "rtdeter"
+DETECTOR = "rtdetr"
 
 # ===== 추적 모델 선택 =====
 # 옵션: "bytetrack", "botsort", "deepsort"

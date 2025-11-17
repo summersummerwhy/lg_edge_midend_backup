@@ -85,12 +85,7 @@ async def mqtt_worker():
     topics = [
         f"{DEVICE_NAMESPACE}/+/motion",
         f"{DEVICE_NAMESPACE}/+/audio",
-<<<<<<< HEAD
-        f"{DEVICE_NAMESPACE}/+/camera/header",
-        f"{DEVICE_NAMESPACE}/+/camera/chunk/#"
-=======
         f"{DEVICE_NAMESPACE}/+/camera/#",
->>>>>>> f336f2f (feat: added yolov5n)
     ]
 
     backoff = 1
