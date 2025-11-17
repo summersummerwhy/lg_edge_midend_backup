@@ -8,6 +8,7 @@ from .yolov11n import YOLOv11nDetector
 from .yolov8n import YOLOv8nDetector
 from .yolov5n import YOLOv5nDetector
 from .rtdetr import RTDetrDetector 
+from .effdetlite import EfficientDetLiteDetector 
 
 
 
@@ -32,6 +33,8 @@ def get_detector(name: str, confidence: float = 0.5) -> BaseDetector:
         return YOLOv5nDetector(confidence=confidence)
     elif name == "rtdetr":                   
         return RTDetrDetector(confidence=confidence)
+    elif name == "effdetlite":
+        return EfficientDetLiteDetector(confidence=confidence)
     else:
         raise ValueError(f"Unknown detector: {name}")
 
@@ -42,5 +45,6 @@ __all__ = [
     "YOLOv8nDetector",
     "YOLOv5nDetector",
     "RTDetrDetector",
+    "EfficientDetLiteDetector",
     "get_detector",
 ]
