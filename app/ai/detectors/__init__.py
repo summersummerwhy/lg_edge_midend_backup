@@ -4,9 +4,10 @@ Detector Factory
 """
 
 from .base import BaseDetector
-from .yolo11n import YOLO11nDetector
+from .yolov11n import YOLO11nDetector
 from .yolov8n import YOLOv8nDetector
-from .mobilenet_ssd import MobileNetSSDDetector
+from .yolov5n import YOLOv5nDetector
+
 
 
 def get_detector(name: str, confidence: float = 0.5) -> BaseDetector:
@@ -14,7 +15,7 @@ def get_detector(name: str, confidence: float = 0.5) -> BaseDetector:
     감지 모델 인스턴스 반환
     
     Args:
-        name: 모델 이름 ("yolo11n", "yolov8n", "mobilenet_ssd")
+        name: 모델 이름 ("yolov11n", "yolov8n", "yolov5n")
         confidence: 감지 임계값
     
     Returns:
@@ -22,12 +23,12 @@ def get_detector(name: str, confidence: float = 0.5) -> BaseDetector:
     """
     name = name.lower()
     
-    if name == "yolo11n":
+    if name == "yolov11n":
         return YOLO11nDetector(confidence=confidence)
     elif name == "yolov8n":
         return YOLOv8nDetector(confidence=confidence)
-    elif name == "mobilenet_ssd":
-        return MobileNetSSDDetector(confidence=confidence)
+    elif name == "yolov5n":  
+        return YOLOv5nDetector(confidence=confidence)
     else:
         raise ValueError(f"Unknown detector: {name}")
 
@@ -36,6 +37,6 @@ __all__ = [
     "BaseDetector",
     "YOLO11nDetector",
     "YOLOv8nDetector",
-    "MobileNetSSDDetector",
+    "MediaPipeDetector",
     "get_detector",
 ]

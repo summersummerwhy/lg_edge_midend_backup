@@ -4,16 +4,25 @@ AI 모델 설정
 """
 
 # ===== 감지 모델 선택 =====
+<<<<<<< HEAD
 # 옵션: "yolov8n", "yolo11n", "mobilenet_ssd"
 DETECTOR = "yolo11n"
+=======
+# 옵션: "yolov8n", "yolov11n", "yolov5n"
+DETECTOR = "yolov5n"
+>>>>>>> f336f2f (feat: added yolov5n)
 
 # ===== 추적 모델 선택 =====
 # 옵션: "bytetrack", "botsort", "deepsort"
 TRACKER = "deepsort"
 
 # ===== 모델 파일 경로 =====
-YOLO11N_PATH = "yolo11n.pt"
+YOLO11N_PATH = "yolov11n.pt"
 YOLOV8N_PATH = "yolov8n.pt"
+<<<<<<< HEAD
+=======
+YOLOV5N_PATH = "yolov5n.pt"  
+>>>>>>> f336f2f (feat: added yolov5n)
 
 # ===== 추론 설정 =====
 CONFIDENCE_THRESHOLD = 0.5  # 감지 임계값
