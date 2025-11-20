@@ -13,6 +13,7 @@ import cv2
 from .detectors import get_detector, BaseDetector
 from .trackers import get_tracker, BaseTracker
 from .ai_config import DETECTOR, TRACKER, CONFIDENCE_THRESHOLD, BENCHMARK_MODE
+# from .faces import get_face_detector, get_face_embedder, get_face_matcher
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,11 @@ class AIInference:
         """
         self.detector_name = detector_name or DETECTOR
         self.tracker_name = tracker_name or TRACKER
+
+        # TODO: 
+        # self.face_detector = get_face_detector(face_detector_name)
+        # self.face_embedder = get_face_embedder(face_embedder_name)
+        # self.face_matcher = get_face_matcher(face_matcher_name)
         
         log.info(f"[AI] Initializing {self.detector_name} + {self.tracker_name}")
         
