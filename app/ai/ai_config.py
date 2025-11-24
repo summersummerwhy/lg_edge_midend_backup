@@ -5,11 +5,11 @@ AI 모델 설정
 
 # ===== 감지 모델 선택 =====
 # 옵션: "yolov8n", "yolov11n", "yolov5n", "rtdetr", "effdetlite"
-DETECTOR = "yolonas"
+DETECTOR = "yolov8n"
 
 # ===== 추적 모델 선택 =====
 # 옵션: "bytetrack", "deepsort"
-TRACKER = "deepsort"
+TRACKER = "bytetrack"
 
 # ===== 모델 파일 경로 =====
 YOLO11N_PATH = "yolov11n.pt"
@@ -24,7 +24,6 @@ MAX_DETECTIONS = 100        # 최대 감지 수
 # ===== 추적 설정 =====
 TRACK_BUFFER = 30           # 추적 버퍼 (프레임)
 TRACK_THRESH = 0.5          # 추적 임계값
-MATCH_THRESH = 0.8          # 매칭 임계값
 
 # ===== 벤치마크 설정 =====
 BENCHMARK_MODE = True      # True면 FPS 측정
