@@ -2,6 +2,6 @@
 data
 **/__pycache__
 *.pt
-.venv
+venv
 .env
 .DS_Store
