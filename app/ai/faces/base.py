@@ -107,3 +107,9 @@ class BaseFaceMatcher(ABC):
         DB 초기화
         """
         pass
+
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    a = a.astype(np.float32)
+    b = b.astype(np.float32)
+    denom = (np.linalg.norm(a) * np.linalg.norm(b)) + 1e-8
+    return float(np.dot(a, b) / denom)
