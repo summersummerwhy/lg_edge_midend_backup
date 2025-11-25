@@ -111,6 +111,124 @@ class AIInference:
                 log.info(f"[BENCHMARK] FPS: {fps:.2f} (avg: {avg_fps:.2f})")
         
         return tracks
+    
+    def run_face_recognition(
+        self,
+        image: np.ndarray,
+        tracks: List[Dict],
+        min_face_size: int = 80,
+        match_threshold: float = 0.6,
+    ) -> List[Dict]:
+        """
+        person tracks + 전체 이미지 → 각 track별 얼굴 인식 결과 리스트.
+
+        Args:
+            image: 전체 프레임 (BGR, HWC)
+            tracks: process_image() 결과 리스트
+            min_face_size: 이 크기보다 작은 얼굴은 무시 (px)
+            match_threshold: 이 값보다 similarity가 낮으면 "unknown" 처리
+
+        Returns:
+            [
+                {
+                    "track_id": 3,
+                    "person_box": [x1,y1,x2,y2],
+                    "face_box": [fx1,fy1,fx2,fy2],   # 전체 이미지 기준 좌표
+                    "face_id": "Seohyun" or "unknown",
+                    "face_score": 0.83,
+                },
+                ...
+            ]
+        """
+        results: List[Dict] = []
+
+        # 얼굴 파이프라인이 준비 안 된 경우
+        if (
+            getattr(self, "face_detector", None) is None
+            or getattr(self, "face_embedder", None) is None
+            or getattr(self, "face_matcher", None) is None
+        ):
+            return results
+
+        h, w, _ = image.shape
+
+        for t in tracks:
+            box = t.get("box")
+            track_id = t.get("track_id")
+            if box is None or track_id is None:
+                continue
+
+            x1, y1, x2, y2 = map(int, box)
+            # 이미지 바운더리 안으로 클램핑
+            x1 = max(0, min(x1, w - 1))
+            x2 = max(0, min(x2, w))
+            y1 = max(0, min(y1, h - 1))
+            y2 = max(0, min(y2, h))
+
+            pw, ph = x2 - x1, y2 - y1
+            if pw <= 0 or ph <= 0:
+                continue
+
+            # 사람 박스 자체가 너무 작으면 스킵
+            if pw < min_face_size or ph < min_face_size:
+                continue
+
+            # 1) 사람 영역 crop
+            person_crop = image[y1:y2, x1:x2]
+            if person_crop.size == 0:
+                continue
+
+            # 2) 사람 영역 내부에서 얼굴 탐지
+            faces = self.face_detector.detect_faces(person_crop)
+            if not faces:
+                continue
+
+            # 가장 큰 얼굴 선택
+            f = self.face_detector.select_main_face(faces)
+            fx1, fy1, fx2, fy2 = map(int, f["box"])
+            fw, fh = fx2 - fx1, fy2 - fy1
+
+            if fw < min_face_size or fh < min_face_size:
+                continue
+
+            # person_crop 기준 얼굴 crop
+            face_chip = person_crop[fy1:fy2, fx1:fx2]
+            if face_chip.size == 0:
+                continue
+
+            # 3) embedding 추출
+            try:
+                emb = self.face_embedder.embed(face_chip)
+            except Exception as e:
+                log.exception("[FACE] embed error for track_id=%s: %s", track_id, e)
+                continue
+
+            # 4) DB 매칭
+            match = self.face_matcher.match(emb)
+            face_id = match.get("id", "unknown")
+            score = float(match.get("score", 0.0))
+
+            # threshold 이하이면 unknown으로 통일
+            if score < match_threshold:
+                face_id = "unknown"
+
+            # 얼굴 박스를 전체 이미지 기준으로 변환
+            abs_fx1 = x1 + fx1
+            abs_fy1 = y1 + fy1
+            abs_fx2 = x1 + fx2
+            abs_fy2 = y1 + fy2
+
+            results.append(
+                {
+                    "track_id": track_id,
+                    "person_box": [x1, y1, x2, y2],
+                    "face_box": [abs_fx1, abs_fy1, abs_fx2, abs_fy2],
+                    "face_id": face_id,
+                    "face_score": score,
+                }
+            )
+
+        return results
 
     def detect_enter_exit(self, tracks: List[Dict]) -> Dict:
         """
@@ -214,3 +332,5 @@ def process_image_array(image: np.ndarray) -> List[Dict]:
     """
     ai = get_ai_instance()
     return ai.process_image(image)
+
+

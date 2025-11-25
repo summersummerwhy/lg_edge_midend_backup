@@ -2,8 +2,6 @@
 Base Face 클래스
 모든 얼굴 인식 모델이 상속받는 인터페이스
 
-- BaseFaceDetector : 이미지에서 얼굴 위치 검출
-- BaseFaceEmbedder : 얼굴 crop -> embedding 벡터
 - BaseFaceMatcher  : embedding -> 사람 ID 매칭
 """
 
@@ -11,6 +9,29 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Optional
 import numpy as np
 
+
+class BaseFaceEmbedder(ABC):
+    """
+    얼굴 이미지를 고정 길이 벡터(embedding)로 바꾸는 인터페이스.
+    """
+
+    @abstractmethod
+    def embed(self, face_image: np.ndarray) -> np.ndarray:
+        """
+        Args:
+            face_image: 얼굴 crop (BGR, HWC)
+
+        Returns:
+            1D numpy array, shape = (D,)
+        """
+        pass
+
+    def embed_batch(self, faces: List[np.ndarray]) -> List[np.ndarray]:
+        """
+        optional: 배치 embedding이 필요할 때 override 가능.
+        기본 구현은 하나씩 embed 호출.
+        """
+        return [self.embed(f) for f in faces]
 
 
 class BaseFaceMatcher(ABC):

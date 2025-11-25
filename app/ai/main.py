@@ -110,10 +110,10 @@ def track_image(image: np.ndarray, format: str = "jpg") -> List[Dict]:
     track_list = events["current"]
     
     # 3. Payload 생성
-    payloads = []
+    payloads: List[Dict] = []
     h, w = image.shape[:2]
     
-    # 입장 이벤트
+    # case A: 입장 이벤트
     for track_id in entered_ids:
         # 해당 track 찾기
         track = next((t for t in tracks if t["track_id"] == track_id), None)
@@ -142,7 +142,7 @@ def track_image(image: np.ndarray, format: str = "jpg") -> List[Dict]:
         payloads.append(payload)
         log.info(f"[AI] ENTER: track_id={track_id}")
     
-    # 퇴장 이벤트
+    # case B: 퇴장 이벤트
     for track_id in exited_ids:
         # 퇴장은 이미지 없음 (이미 사라짐)
         payload = {
@@ -151,5 +151,48 @@ def track_image(image: np.ndarray, format: str = "jpg") -> List[Dict]:
         }
         payloads.append(payload)
         log.info(f"[AI] EXIT: track_id={track_id}")
+
+    # case C: 얼굴 인식 + DB 매칭 결과 payload 추가
+    #  - 비용 줄이려고 "이번 프레임에 새로 들어온 track"만 얼굴 인식
+    #  - AIInference.run_face_recognition(image, tracks_subset, ...) 사용
+    try:
+        entered_tracks = [t for t in tracks if t["track_id"] in entered_ids]
+
+        # min_face_size / match_threshold는 나중에 config로 빼도 됨
+        face_results = ai.run_face_recognition(
+            image,
+            entered_tracks,
+            min_face_size=80,
+            match_threshold=0.6,
+        )
+    except AttributeError:
+        # 아직 run_face_recognition 안 붙어 있을 때를 대비한 안전장치
+        face_results = []
+        log.debug("[AI] run_face_recognition not implemented, skipping face pipeline")
+    except Exception as e:
+        face_results = []
+        log.exception("[AI] Face recognition error: %s", e)
+
+    for fr in face_results:
+        # DB에 등록된 사람만 high-end로 보내고 싶으면 unknown은 스킵
+        if fr.get("face_id") in (None, "unknown"):
+            continue
+
+        payload = {
+            "type": "face",
+            "event": "recognized",
+            "track_id": fr["track_id"],
+            "person_box": fr["person_box"],
+            "face_box": fr["face_box"],
+            "face_id": fr["face_id"],
+            "face_score": fr["face_score"],
+        }
+        payloads.append(payload)
+        log.info(
+            "[AI] FACE: track_id=%s id=%s score=%.3f",
+            fr["track_id"],
+            fr["face_id"],
+            fr["face_score"],
+        )
     
     return payloads

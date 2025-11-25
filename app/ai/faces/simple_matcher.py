@@ -1,142 +1,171 @@
 import json
 from pathlib import Path
-from typing import Dict, List
+import logging
+from typing import Dict, List, Optional
 
 import numpy as np
 
 from .base import BaseFaceMatcher, cosine_similarity
 
+log = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 class SimpleFaceMatcher(BaseFaceMatcher):
     """
-    JSON 기반 Face Matcher
-
-    - embeddings.json 형식:
-      {
-        "person_id_1": [[...embedding1...], [...embedding2...], ...],
-        "person_id_2": [[...], ...],
-        ...
-      }
-
-    - match(embedding):
-      모든 등록 embedding과 cosine similarity를 계산해서
-      최대값이 threshold 이상이면 그 사람으로 인식,
-      아니면 "unknown" 반환.
+    - embeddings.json 파일에 사람별 임베딩들을 저장
+    - 매칭 시: 모든 사람의 모든 임베딩과 cosine similarity를 계산해서
+      가장 높은 것 하나를 반환
     """
 
-    def __init__(self, db_path: str, threshold: float = 0.55):
-        self.db_path = Path(db_path)
-        self.threshold = threshold
+    def __init__(self, db_path: Optional[str] = None):
+        """
+        Args:
+            db_path: embeddings.json 경로 (default -> faces/database/embeddings.json)
+        """
+        if db_path is None:
+            faces_dir = Path(__file__).resolve().parent
+            db_dir = faces_dir / "database"
+            db_dir.mkdir(parents=True, exist_ok=True)
+            self.db_path = db_dir / "embeddings.json"
+        else:
+            self.db_path = Path(db_path)
+
+        # 내부 메모리 DB
+        # { "Seohyun": [np.array(...), np.array(...), ...], ... }
         self._db: Dict[str, List[np.ndarray]] = {}
 
-        # DB 디렉토리 없으면 생성
-        if not self.db_path.parent.exists():
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._load_db()
 
-        self._load()
+    # --------------------- DB I/O --------------------- #
 
-    # ------------------------
-    # 내부: JSON <-> 메모리 변환
-    # ------------------------
-
-    def _load(self):
+    def _load_db(self):
         if not self.db_path.exists():
+            log.info("[FaceDB] %s not found. starting with empty DB.", self.db_path)
             self._db = {}
             return
 
         try:
-            with self.db_path.open("r", encoding="utf-8") as f:
+            with open(self.db_path, "r", encoding="utf-8") as f:
                 raw = json.load(f)
-
-            db: Dict[str, List[np.ndarray]] = {}
-            for person_id, emb_list in raw.items():
-                db[person_id] = [np.array(e, dtype=np.float32) for e in emb_list]
-            self._db = db
         except Exception as e:
-            print(f"[FaceMatcher] Failed to load DB: {e}")
+            log.exception("[FaceDB] failed to load %s: %s", self.db_path, e)
             self._db = {}
+            return
 
-    def _save(self):
+        db: Dict[str, List[np.ndarray]] = {}
+        # raw 형식: { "Alice": [ [float, ...], [float, ...], ... ], ... }
+        for person_id, emb_list in raw.items():
+            db[person_id] = [np.array(e, dtype=np.float32) for e in emb_list]
+
+        self._db = db
+        log.info(
+            "[FaceDB] loaded %d persons from %s",
+            len(self._db),
+            self.db_path,
+        )
+
+    def _save_db(self):
         raw: Dict[str, List[List[float]]] = {}
         for person_id, emb_list in self._db.items():
-            raw[person_id] = [emb.astype(float).tolist() for emb in emb_list]
+            raw[person_id] = [e.astype(float).tolist() for e in emb_list]
 
         try:
-            with self.db_path.open("w", encoding="utf-8") as f:
-                json.dump(raw, f, ensure_ascii=False, indent=2)
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.db_path, "w", encoding="utf-8") as f:
+                json.dump(raw, f, ensure_ascii=False)
+            log.info(
+                "[FaceDB] saved %d persons to %s",
+                len(self._db),
+                self.db_path,
+            )
         except Exception as e:
-            print(f"[FaceMatcher] Failed to save DB: {e}")
+            log.exception("[FaceDB] failed to save %s: %s", self.db_path, e)
 
-    # ------------------------
-    # BaseFaceMatcher 인터페이스 구현
-    # ------------------------
+    # --------------------- BaseFaceMatcher 구현 --------------------- #
 
     def match(self, embedding: np.ndarray) -> Dict:
         """
-        Args:
-            embedding: L2-normalized 1D vector
+        가장 유사한 사람 한 명을 찾아 반환.
 
         Returns:
             {
                 "id": "person_id" or "unknown",
-                "score": float,
-                "meta": {...}
+                "score": float,   # 최고 similarity
+                "meta": {
+                    "best_person": person_id,
+                    "best_score": float,
+                    "db_size": int,
+                }
             }
         """
-        if embedding is None or embedding.size == 0:
-            return {"id": "unknown", "score": 0.0, "meta": {}}
-
-        best_id = "unknown"
-        best_score = -1.0
-        best_meta = {}
-
-        for person_id, emb_list in self._db.items():
-            for idx, ref_emb in enumerate(emb_list):
-                s = cosine_similarity(embedding, ref_emb)
-                if s > best_score:
-                    best_score = s
-                    best_id = person_id
-                    best_meta = {"index": idx}
-
-        if best_score < self.threshold:
+        if not self._db:
             return {
                 "id": "unknown",
-                "score": float(best_score),
-                "meta": best_meta,
+                "score": 0.0,
+                "meta": {"reason": "empty_db", "db_size": 0},
+            }
+
+        best_person = None
+        best_score = -1.0
+
+        for person_id, emb_list in self._db.items():
+            for ref in emb_list:
+                s = cosine_similarity(embedding, ref)
+                if s > best_score:
+                    best_score = s
+                    best_person = person_id
+
+        if best_person is None:
+            return {
+                "id": "unknown",
+                "score": 0.0,
+                "meta": {"reason": "no_match", "db_size": len(self._db)},
             }
 
         return {
-            "id": best_id,
+            "id": best_person,
             "score": float(best_score),
-            "meta": best_meta,
+            "meta": {
+                "best_person": best_person,
+                "best_score": float(best_score),
+                "db_size": len(self._db),
+            },
         }
 
     def register(self, person_id: str, embeddings: List[np.ndarray]):
         """
-        Args:
-            person_id: "dad", "mom" 같은 식별자
-            embeddings: 이 사람의 얼굴 embedding 리스트
+        같은 사람의 얼굴 임베딩 여러 개를 한 번에 등록
+        embeddings 안의 벡터는 이미 L2-normalized라고 가정
         """
+        if not embeddings:
+            log.warning("[FaceDB] register called with empty embeddings for %s", person_id)
+            return
+
+        # numpy 배열로 강제 캐스팅
+        embs = [np.asarray(e, dtype=np.float32) for e in embeddings]
+
         if person_id not in self._db:
-            self._db[person_id] = []
+            self._db[person_id] = embs
+        else:
+            self._db[person_id].extend(embs)
 
-        for emb in embeddings:
-            if emb is None or emb.size == 0:
-                continue
-            # L2 normalize 보장
-            norm = np.linalg.norm(emb) + 1e-8
-            emb_norm = emb / norm
-            self._db[person_id].append(emb_norm.astype(np.float32))
+        log.info(
+            "[FaceDB] registered %d embeddings for %s (total %d)",
+            len(embs),
+            person_id,
+            len(self._db[person_id]),
+        )
 
-        self._save()
+        self._save_db()
 
     def clear(self):
         """
-        DB 초기화
+        DB 초기화 (메모리 + 파일 둘 다)
         """
-        self._db = {}
-        if self.db_path.exists():
-            try:
+        self._db.clear()
+        try:
+            if self.db_path.exists():
                 self.db_path.unlink()
-            except Exception as e:
-                print(f"[FaceMatcher] Failed to remove DB file: {e}")
+                log.info("[FaceDB] %s removed", self.db_path)
+        except Exception as e:
+            log.exception("[FaceDB] failed to remove %s: %s", self.db_path, e)

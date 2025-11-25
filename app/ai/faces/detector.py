@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
 import cv2
 import numpy as np
 import mediapipe as mp
@@ -74,3 +74,17 @@ class MediaPipeFaceDetector():
             })
 
         return faces
+    
+    def select_main_face(self, faces: List[Dict]) -> Optional[Dict]:
+        """
+        여러 얼굴 중 '하나'만 고르고 싶을 때 사용하는 helper.
+        기본 구현은 '가장 큰 얼굴'을 고름.
+        """
+        if not faces:
+            return None
+
+        def area(face):
+            x1, y1, x2, y2 = face["box"]
+            return (x2 - x1) * (y2 - y1)
+
+        return max(faces, key=area)
