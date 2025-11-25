@@ -12,8 +12,11 @@ import cv2
 
 from .detectors import get_detector, BaseDetector
 from .trackers import get_tracker, BaseTracker
-from .ai_config import DETECTOR, TRACKER, CONFIDENCE_THRESHOLD, BENCHMARK_MODE
-# from .faces import get_face_detector, get_face_embedder, get_face_matcher
+from .ai_config import DETECTOR, TRACKER, CONFIDENCE_THRESHOLD, BENCHMARK_MODE, ARCFACE_ONNX_PATH
+from .faces import get_face_matcher
+from .faces.detector import MediaPipeFaceDetector
+from .faces.embedder import ArcFaceONNXEmbedder
+from .faces.simple_matcher import SimpleFaceMatcher
 
 log = logging.getLogger(__name__)
 
@@ -21,10 +24,14 @@ log = logging.getLogger(__name__)
 class AIInference:
     """
     AI 추론 파이프라인
-    Detector + Tracker 조합
+    Person(Detector + Tracker) + Face(Detector + Embedder + Matcher)  조합
     """
 
-    def __init__(self, detector_name: str = None, tracker_name: str = None):
+    def __init__(
+        self, 
+        detector_name: str = None, 
+        tracker_name: str = None,
+    ):
         """
         Args:
             detector_name: 감지 모델 이름 (None이면 config에서 로드)
@@ -33,10 +40,6 @@ class AIInference:
         self.detector_name = detector_name or DETECTOR
         self.tracker_name = tracker_name or TRACKER
 
-        # TODO: 
-        # self.face_detector = get_face_detector(face_detector_name)
-        # self.face_embedder = get_face_embedder(face_embedder_name)
-        # self.face_matcher = get_face_matcher(face_matcher_name)
         
         log.info(f"[AI] Initializing {self.detector_name} + {self.tracker_name}")
         
@@ -46,6 +49,15 @@ class AIInference:
             confidence=CONFIDENCE_THRESHOLD
         )
         self.tracker: BaseTracker = get_tracker(self.tracker_name)
+
+        # face pipleline load
+        self.face_detector = MediaPipeFaceDetector()
+        self.face_embedder = ArcFaceONNXEmbedder(
+            model_path=ARCFACE_ONNX_PATH,
+            input_size=(112, 112),
+            normalize=True,
+        )
+        self.face_matcher = SimpleFaceMatcher()
         
         # 워밍업
         self.detector.warmup()

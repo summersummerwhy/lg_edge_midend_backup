@@ -12,63 +12,6 @@ from typing import List, Dict, Optional
 import numpy as np
 
 
-class BaseFaceDetector(ABC):
-    """
-    얼굴 위치를 찾는 인터페이스.
-
-    input  : 전체 이미지 (BGR, HWC)
-    output : 얼굴 박스 목록
-        [
-            {
-                "box": [x1, y1, x2, y2],  # 좌상단 / 우하단
-                "confidence": 0.95,
-            },
-            ...
-        ]
-    """
-
-    @abstractmethod
-    def detect_faces(self, image: np.ndarray) -> List[Dict]:
-        pass
-
-    def select_main_face(self, faces: List[Dict]) -> Optional[Dict]:
-        """
-        여러 얼굴 중 '하나'만 고르고 싶을 때 사용하는 helper.
-        기본 구현은 '가장 큰 얼굴'을 고름.
-        """
-        if not faces:
-            return None
-
-        def area(face):
-            x1, y1, x2, y2 = face["box"]
-            return (x2 - x1) * (y2 - y1)
-
-        return max(faces, key=area)
-
-
-class BaseFaceEmbedder(ABC):
-    """
-    얼굴 이미지를 고정 길이 벡터(embedding)로 바꾸는 인터페이스.
-    """
-
-    @abstractmethod
-    def embed(self, face_image: np.ndarray) -> np.ndarray:
-        """
-        Args:
-            face_image: 얼굴 crop (BGR, HWC)
-
-        Returns:
-            1D numpy array, shape = (D,)
-        """
-        pass
-
-    def embed_batch(self, faces: List[np.ndarray]) -> List[np.ndarray]:
-        """
-        optional: 배치 embedding이 필요할 때 override 가능.
-        기본 구현은 하나씩 embed 호출.
-        """
-        return [self.embed(f) for f in faces]
-
 
 class BaseFaceMatcher(ABC):
     """

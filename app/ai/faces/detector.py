@@ -3,10 +3,8 @@ import cv2
 import numpy as np
 import mediapipe as mp
 
-from .base import BaseFaceDetector
 
-
-class MediaPipeFaceDetector(BaseFaceDetector):
+class MediaPipeFaceDetector():
     """
     MediaPipe Face Detection 기반 FaceDetector
 
