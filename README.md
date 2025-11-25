@@ -106,10 +106,10 @@ yolo11n         botsort           12.34       9.10      16.20
 - [x] 모듈화
 - [x] 여러 모델 추가
 - [x] 벤치마크 도구
-- [ ] 실제 TOPST에서 테스트
+- [x] 실제 TOPST에서 테스트
 
 ### Phase 2: 정확도 개선 (나중)
-- [ ] 얼굴 인식 추가 (MobileFaceNet)
+- [x] 얼굴 인식 추가 (MobileFaceNet)
 - [ ] 세부 사물 인식 (EfficientDet-Lite)
 
 ### Phase 3: 최적화

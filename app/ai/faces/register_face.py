@@ -1,5 +1,5 @@
 """
-웹캠으로 얼굴 여러 장 캡처해서 embeddings.json에 등록하는 임시 CLI.
+웹캠으로 얼굴 여러 장 캡처해서 embeddings.json에 등록하는 임시 CLI
 
 사용 예시:
     python -m app.ai.faces.register_face --id Alice
@@ -26,10 +26,7 @@ def register_from_webcam(
     max_samples: int = 5,
     min_face_size: int = 80,
 ):
-    """
-    웹캠에서 얼굴 몇 장 찍어서 ArcFace 임베딩을 추출하고
-    SimpleFaceMatcher에 등록한다.
-    """
+
     # 1. 모델 준비
 
     face_detector = MediaPipeFaceDetector()

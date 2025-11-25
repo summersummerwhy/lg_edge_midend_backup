@@ -1,6 +1,6 @@
 """
 통합 Inference 모듈
-Detector + Tracker 조합
+Detector + Tracker + Face 작업들 조합
 """
 
 import time

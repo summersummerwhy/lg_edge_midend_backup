@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import time
 
 from .detector import MediaPipeFaceDetector
 from .embedder import ArcFaceONNXEmbedder
@@ -25,10 +26,20 @@ def main():
     print("등록된 얼굴이 있으면 ID와 score가 표시됩니다.")
     print("q 키를 누르면 종료합니다.")
 
+    last_time = time.time()
+    fps = 0.0
+
     while True:
         ret, frame = cap.read()
         if not ret:
             break
+
+        now = time.time()
+        dt = now - last_time
+        last_time = now
+        if dt > 0:
+            current_fps = 1.0 / dt
+            fps = 0.9 * fps + 0.1 * current_fps if fps > 0 else current_fps
 
         h, w = frame.shape[:2]
         faces = face_detector.detect_faces(frame)
@@ -52,9 +63,12 @@ def main():
             else:
                 face_id_disp = face_id
 
+            box_w = x2 - x1
+            box_h = y2 - y1
+
             # 박스 & 라벨 그리기
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            label = f"{face_id_disp} ({score:.2f})"
+            label = f"{face_id_disp} ({score:.2f}) [{box_w}x{box_h}]"
             cv2.putText(
                 frame,
                 label,
@@ -65,6 +79,17 @@ def main():
                 2,
                 cv2.LINE_AA,
             )
+
+        cv2.putText(
+            frame,
+            f"FPS: {fps:.1f}",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
 
         cv2.imshow("Face Recognize Test", frame)
         key = cv2.waitKey(1) & 0xFF

@@ -1,7 +1,3 @@
-"""
-기존 코드와 호환되는 main.py
-track_image_by_path, track_image 함수 제공
-"""
 
 import logging
 import cv2
