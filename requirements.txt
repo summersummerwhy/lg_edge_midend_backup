@@ -19,6 +19,7 @@ torchvision
 ultralytics
 mediapipe
 effdet
+onnxruntime
 
 # --- Tracking ---
 lap==0.5.12
