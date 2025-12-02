@@ -8,6 +8,7 @@ import numpy as np
 import cv2
 
 from app.ai.main import track_image_by_path, track_image
+from app.ai.temp import add_new_face
 from .config import AUDIO_DIR, IMAGE_DIR, DEVICE_NAMESPACE, AUDIO_SAVE_INTERVAL
 from .models import Envelope, MotionPayload, AudioPayload, CameraPayload, FacePayload
 from .utils import ts_to_iso, safe_filename, save_wav_pcm16_mono
@@ -295,7 +296,8 @@ async def handle_face(msg: Envelope) -> None:
             p.width,
             p.height,
         )
-        # run_face_ai(img)
+
+        add_new_face(img)
 
     except Exception as e:
         log.exception("[FACE] error: %s", e)
