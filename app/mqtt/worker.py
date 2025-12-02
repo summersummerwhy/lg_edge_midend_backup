@@ -21,6 +21,7 @@ from ..handlers import (
     handle_audio,
     handle_camera_header_raw,
     handle_camera_chunk_raw,
+    handle_face,
 )
 import re
 
@@ -76,9 +77,10 @@ async def route_message(topic: str, payload: bytes):
         await handle_motion(env)
     elif kind == "audio":
         await handle_audio(env)
+    elif kind == "face":
+        await handle_face(env)
     else:
         log.debug("[MQTT] unknown kind: %s", kind)
-
 
 
 async def mqtt_worker():
@@ -86,6 +88,7 @@ async def mqtt_worker():
         f"{DEVICE_NAMESPACE}/+/motion",
         f"{DEVICE_NAMESPACE}/+/audio",
         f"{DEVICE_NAMESPACE}/+/camera/#",
+        f"{DEVICE_NAMESPACE}/+/face",
     ]
 
     backoff = 1

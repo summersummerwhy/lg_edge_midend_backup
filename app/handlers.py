@@ -9,7 +9,7 @@ import cv2
 
 from app.ai.main import track_image_by_path, track_image
 from .config import AUDIO_DIR, IMAGE_DIR, DEVICE_NAMESPACE, AUDIO_SAVE_INTERVAL
-from .models import Envelope, MotionPayload, AudioPayload, CameraPayload
+from .models import Envelope, MotionPayload, AudioPayload, CameraPayload, FacePayload
 from .utils import ts_to_iso, safe_filename, save_wav_pcm16_mono
 from .state import (
     latest,
@@ -26,6 +26,7 @@ log = logging.getLogger(__name__)
 raw_camera_headers: Dict[Tuple[str, int], Dict[str, Any]] = {}
 raw_camera_chunks: Dict[Tuple[str, int], Dict[int, bytes]] = {}
 
+
 def _save_image_file(device: str, ts: int, seq: int, jpg: bytes) -> Path:
     day = datetime.utcfromtimestamp(ts / 1000).strftime("%Y%m%d")
     subdir = IMAGE_DIR / safe_filename(device) / day
@@ -34,6 +35,13 @@ def _save_image_file(device: str, ts: int, seq: int, jpg: bytes) -> Path:
     with open(fpath, "wb") as f:
         f.write(jpg)
     return fpath
+
+
+def face_ai(img: np.ndarray) -> None:
+    """
+    가상의 Face AI 함수
+    """
+    log.info(f"[FACE_AI] Processing image shape={img.shape}")
 
 
 async def handle_motion(msg: Envelope) -> None:
@@ -250,6 +258,7 @@ async def handle_camera_header_raw(env: Envelope) -> None:
     }
     await _try_assemble_raw(env.device, env.seq)
 
+
 async def handle_camera_chunk_raw(
     *,
     device: str,
@@ -265,6 +274,31 @@ async def handle_camera_chunk_raw(
         raw_camera_chunks[key][idx] = chunk_bytes
 
     await _try_assemble_raw(device, seq, save_image=save_image)
+
+
+async def handle_face(msg: Envelope) -> None:
+    p = FacePayload(**msg.payload)
+
+    try:
+        img_bytes = base64.b64decode(p.data)
+        arr = np.frombuffer(img_bytes, dtype=np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+        if img is None:
+            log.error("[FACE] %s seq=%s failed to decode image", msg.device, msg.seq)
+            return
+
+        log.info(
+            "[FACE] %s seq=%s received face image %dx%d",
+            msg.device,
+            msg.seq,
+            p.width,
+            p.height,
+        )
+        # run_face_ai(img)
+
+    except Exception as e:
+        log.exception("[FACE] error: %s", e)
 
 
 async def _try_assemble_raw(device: str, seq: int, *, save_image: bool = True) -> None:
@@ -305,6 +339,7 @@ async def _try_assemble_raw(device: str, seq: int, *, save_image: bool = True) -
 
     # latest 갱신
     from .state import latest
+
     latest_payload = {"format": "jpeg", "width": width, "height": height}
     if fpath is not None:
         latest_payload["file"] = str(fpath)
@@ -322,6 +357,7 @@ async def _try_assemble_raw(device: str, seq: int, *, save_image: bool = True) -
             payloads = track_image_by_path(fpath)
         else:
             import numpy as np, cv2
+
             arr = np.frombuffer(jpg_bytes, dtype=np.uint8)
             image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
             if image is None:
@@ -352,7 +388,6 @@ async def _try_assemble_raw(device: str, seq: int, *, save_image: bool = True) -
 
     except Exception as e:
         log.exception("[AI][CAMERA] error: %s", e)
-
 
     # 메모리 정리
     raw_camera_headers.pop(key, None)
