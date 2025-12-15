@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.INFO)
 
 def register_from_webcam(
     person_id: str,
-    max_samples: int = 5,
+    max_samples: 10,
     min_face_size: int = 80,
 ):
 
@@ -49,10 +49,24 @@ def register_from_webcam(
     print(f"[등록 모드] 사람 ID: {person_id}")
     print("  - 'c' 키: 현재 프레임에서 얼굴 1장 캡처")
     print("  - 'q' 키: 종료 및 저장")
-    print(f"  ⇒ 최대 {max_samples}장까지 캡처합니다.")
+    print(f"  ⇒ 10장을 캡처합니다.")
     print("===================================================")
 
+
     collected: List[np.ndarray] = []
+    # 추천 10장 캡처 플랜 (각도/포즈 안내)
+    pose_plan = [
+        "FRONT 1/3",
+        "FRONT 2/3 (close your eyes)",
+        "FRONT 3/3 (from distance)",
+        "LEFT deg 1/2: 15 deg",
+        "LEFT deg 2/2: 30 deg",
+        "RIGHT deg 1/2: 15 deg",
+        "RIGHT deg 2/2: 30 deg",
+        "CHIN UP (slightly)",
+        "CHIN DOWN (slightly)",
+        "EXPR (smile)",
+    ]
 
     while True:
         ret, frame = cap.read()
@@ -62,10 +76,14 @@ def register_from_webcam(
 
         h, w = frame.shape[:2]
 
+        next_pose = (
+            pose_plan[len(collected)] if len(collected) < 10 else "done! press q"
+        )
+
         # 안내 텍스트
         cv2.putText(
             frame,
-            f"ID: {person_id} | collected: {len(collected)}/{max_samples}",
+            f"ID: {person_id} | collected: {len(collected)}/10",
             (10, 25),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
@@ -79,6 +97,17 @@ def register_from_webcam(
             (10, 50),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
+        cv2.putText(
+            frame,
+            f"Now: {next_pose}",
+            (10, 75),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
             (255, 255, 255),
             2,
             cv2.LINE_AA,
@@ -172,14 +201,6 @@ def main():
         help="등록할 사람 ID (예: Seohyun, Dad 등)",
     )
     parser.add_argument(
-        "--num",
-        "--max-samples",
-        dest="max_samples",
-        type=int,
-        default=5,
-        help="캡처할 최대 샘플 수 (default: 5)",
-    )
-    parser.add_argument(
         "--min-face",
         dest="min_face_size",
         type=int,
@@ -191,7 +212,7 @@ def main():
 
     register_from_webcam(
         person_id=args.person_id,
-        max_samples=args.max_samples,
+        max_samples=10,
         min_face_size=args.min_face_size,
     )
 

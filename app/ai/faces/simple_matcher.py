@@ -17,11 +17,12 @@ class SimpleFaceMatcher(BaseFaceMatcher):
       가장 높은 것 하나를 반환
     """
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: Optional[str] = None, threshold: float = 0.54):
         """
         Args:
             db_path: embeddings.json 경로 (default -> faces/database/embeddings.json)
         """
+        self.threshold = threshold
         if db_path is None:
             faces_dir = Path(__file__).resolve().parent
             db_dir = faces_dir / "database"
@@ -86,17 +87,7 @@ class SimpleFaceMatcher(BaseFaceMatcher):
     def match(self, embedding: np.ndarray) -> Dict:
         """
         가장 유사한 사람 한 명을 찾아 반환.
-
-        Returns:
-            {
-                "id": "person_id" or "unknown",
-                "score": float,   # 최고 similarity
-                "meta": {
-                    "best_person": person_id,
-                    "best_score": float,
-                    "db_size": int,
-                }
-            }
+        (개선) 사람별로 similarity를 모아서 top-k 평균으로 판단
         """
         if not self._db:
             return {
@@ -105,17 +96,26 @@ class SimpleFaceMatcher(BaseFaceMatcher):
                 "meta": {"reason": "empty_db", "db_size": 0},
             }
 
+        TOPK = 3  # 필요하면 1~5 사이로 조절 (3 추천)
+
         best_person = None
         best_score = -1.0
 
         for person_id, emb_list in self._db.items():
-            for ref in emb_list:
-                s = cosine_similarity(embedding, ref)
-                if s > best_score:
-                    best_score = s
-                    best_person = person_id
+            if not emb_list:
+                continue
 
-        if best_person is None:
+            scores = [cosine_similarity(embedding, ref) for ref in emb_list]
+            scores.sort(reverse=True)
+
+            k = min(TOPK, len(scores))
+            agg = float(sum(scores[:k]) / k)  # top-k 평균
+
+            if agg > best_score:
+                best_score = agg
+                best_person = person_id
+
+        if best_person is None or best_score < self.threshold:
             return {
                 "id": "unknown",
                 "score": 0.0,
@@ -129,8 +129,10 @@ class SimpleFaceMatcher(BaseFaceMatcher):
                 "best_person": best_person,
                 "best_score": float(best_score),
                 "db_size": len(self._db),
+                "method": f"top{TOPK}_mean",
             },
         }
+
 
     def register(self, person_id: str, embeddings: List[np.ndarray]):
         """
