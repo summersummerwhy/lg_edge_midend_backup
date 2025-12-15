@@ -200,20 +200,12 @@ def main():
         required=True,
         help="등록할 사람 ID (예: Seohyun, Dad 등)",
     )
-    parser.add_argument(
-        "--min-face",
-        dest="min_face_size",
-        type=int,
-        default=80,
-        help="최소 얼굴 크기 (px, default: 80)",
-    )
+
 
     args = parser.parse_args()
 
     register_from_webcam(
         person_id=args.person_id,
-        max_samples=10,
-        min_face_size=args.min_face_size,
     )
 
 
