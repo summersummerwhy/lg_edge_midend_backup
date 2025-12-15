@@ -11,7 +11,6 @@ from pathlib import Path
 import cv2
 
 from .detectors import get_detector, BaseDetector
-from .trackers import get_tracker, BaseTracker
 from .ai_config import DETECTOR, TRACKER, CONFIDENCE_THRESHOLD, BENCHMARK_MODE, ARCFACE_ONNX_PATH
 from .faces import get_face_matcher
 from .faces.detector import MediaPipeFaceDetector
@@ -48,7 +47,6 @@ class AIInference:
             self.detector_name, 
             confidence=CONFIDENCE_THRESHOLD
         )
-        self.tracker: BaseTracker = get_tracker(self.tracker_name)
 
         # face pipleline load
         self.face_detector = MediaPipeFaceDetector()
@@ -70,47 +68,75 @@ class AIInference:
         
         log.info(f"[AI] Ready: {self.detector_name} + {self.tracker_name}")
 
+    
     def process_image(self, image: np.ndarray) -> List[Dict]:
         """
-        이미지 처리 (Detection + Tracking)
-        
-        Args:
-            image: OpenCV 이미지 (HWC, BGR)
-        
+        이미지 처리 (YOLO internal Tracking: BoT-SORT)
         Returns:
-            추적 결과 리스트
             [
-                {
-                    "box": [x1, y1, x2, y2],
-                    "track_id": 1,
-                    "confidence": 0.95
-                },
-                ...
+              {"box":[x1,y1,x2,y2], "track_id": 1, "confidence": 0.95},
+              ...
             ]
         """
         start_time = time.time()
-        
-        # 1. Detection
-        detections = self.detector.detect(image)
-        
-        # 2. Tracking
-        # BoT-SORT는 이미지 필요
-        if self.tracker_name == "botsort":
-            tracks = self.tracker.update(detections, image=image)
-        else:
-            tracks = self.tracker.update(detections)
-        
-        # FPS 측정
+
+        # detector 내부 YOLO 모델 꺼내기
+        yolo = getattr(self.detector, "model", None)
+        if yolo is None or not hasattr(yolo, "track"):
+            raise RuntimeError(
+                "[AI] detector.model.track()를 찾을 수 없음. "
+                "YOLOv8nDetector가 self.model = YOLO(...) 형태인지 확인해줘."
+            )
+
+        # tracker yaml 선택
+        tracker_yaml = "botsort.yaml" if self.tracker_name == "botsort" else "bytetrack.yaml"
+
+        # YOLO 내장 tracker 실행 (persist=True 중요!)
+        results = yolo.track(
+            source=image,
+            persist=True,
+            verbose=False,
+            conf=CONFIDENCE_THRESHOLD,
+            tracker=tracker_yaml,
+            classes=[0],  # person만 (COCO)
+        )
+
+        tracks: List[Dict] = []
+        if results and results[0].boxes is not None:
+            boxes = results[0].boxes
+
+            xyxy = boxes.xyxy.cpu().numpy()
+            confs = boxes.conf.cpu().numpy() if boxes.conf is not None else None
+            ids = boxes.id.cpu().numpy().astype(int) if boxes.id is not None else None
+
+            for i in range(len(xyxy)):
+                x1, y1, x2, y2 = xyxy[i].tolist()
+                # ids가 없으면 트래킹 ID가 없다는 뜻 -> 이 박스는 스킵
+                if ids is None:
+                    continue
+                
+                tid = int(ids[i])
+                # 혹시 음수면(거의 없음) 스킵
+                if tid < 0:
+                    continue
+                
+                tracks.append({
+                    "box": [int(x1), int(y1), int(x2), int(y2)],
+                    "track_id": tid,
+                    "confidence": float(confs[i]) if confs is not None else 0.0,
+                })
+
+        # FPS
         elapsed = time.time() - start_time
         fps = 1.0 / elapsed if elapsed > 0 else 0
-        
         if BENCHMARK_MODE:
             self.fps_history.append(fps)
             if len(self.fps_history) % 10 == 0:
                 avg_fps = sum(self.fps_history[-10:]) / 10
                 log.info(f"[BENCHMARK] FPS: {fps:.2f} (avg: {avg_fps:.2f})")
-        
+
         return tracks
+
     
     def run_face_recognition(
         self,
@@ -275,12 +301,17 @@ class AIInference:
         }
 
     def reset(self):
-        """
-        추적 상태 초기화
-        """
-        self.tracker.reset()
         self.previous_tracks.clear()
         self.fps_history.clear()
+    
+        # best-effort: ultralytics predictor tracker reset 시도
+        yolo = getattr(self.detector, "model", None)
+        try:
+            if hasattr(yolo, "predictor") and hasattr(yolo.predictor, "tracker") and yolo.predictor.tracker is not None:
+                yolo.predictor.tracker.reset()
+        except Exception:
+            pass
+    
         log.info("[AI] Reset complete")
 
 
