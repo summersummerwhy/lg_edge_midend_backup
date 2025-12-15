@@ -104,14 +104,24 @@ def track_image(image: np.ndarray, format: str = "jpg") -> List[Dict]:
         if hasattr(ai, "face_pending"):
             ai.face_pending.pop(track_id, None)
 
+        # enter 보낸 적 없는 track이면 exit 드랍
+        if hasattr(ai, "entered_tracks") and track_id not in ai.entered_tracks:
+            log.info(f"[AI] DROP EXIT(no enter): track_id={track_id}")
+            continue
+
         payloads.append({
             "type": "exit",
             "track_id": track_id,
         })
         log.info(f"[AI] EXIT: track_id={track_id}")
 
+        # exit 보냈으면 기록에서 제거(메모리/재사용 대비)
+        if hasattr(ai, "entered_tracks"):
+            ai.entered_tracks.discard(track_id)
+
     # 4) 입장 이벤트: 얼굴 재시도 로직이 "끝난 것만" enter로 전송
-    #    n=0.5초 간격, m=6번 시도 (총 ~3초)
+    # TODO: 키패드 누르는 시간 정도로 설정...
+    #    n=0.5초 간격, m=6번 시도 (총 ~3초) 
     try:
         enter_results = ai.update_face_pending(
             image=image,
@@ -165,6 +175,9 @@ def track_image(image: np.ndarray, format: str = "jpg") -> List[Dict]:
                 "data_b64": img_b64,
             },
         })
+
+        if hasattr(ai, "entered_tracks"):
+            ai.entered_tracks.add(track_id)
 
         log.info(
             "[AI] ENTER(resolved): track_id=%s face_id=%s score=%.3f tries=%s",

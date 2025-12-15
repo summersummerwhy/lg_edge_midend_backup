@@ -63,6 +63,7 @@ class AIInference:
         # 이전 track 상태 (입장/퇴장 감지용)
         self.previous_tracks = {}  # {track_id: box}
         self.face_pending: Dict[int, Dict] = {}
+        self.entered_tracks = set()
         
         # FPS 측정
         self.fps_history = []
