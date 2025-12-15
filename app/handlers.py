@@ -430,11 +430,12 @@ async def _try_assemble_raw(device: str, seq: int, *, save_image: bool = True) -
 
         for alert in processed_alerts:
             await publish_mqtt(topic, alert)
-            log.debug(
-                "[AI-PUB] %s (%s, track_id=%s)",
+            log.warning(
+                "[AI-PUB] %s (%s, track_id=%s, face_id:%s)",
                 topic,
                 alert.get("payload").get("type"),
                 alert.get("payload").get("track_id"),
+                alert.get("payload").get("face_id"),
             )
     except Exception as e:
         log.exception("[AI][CAMERA] Publish AI error: %s", e)

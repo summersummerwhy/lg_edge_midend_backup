@@ -235,7 +235,6 @@ class AIInference:
                 if fw >= min_face_size and fh >= min_face_size:
                     face_chip = person_crop[fy1:fy2, fx1:fx2]
                     if face_chip.size == 0:
-                        log.info("[FACE][EMPTY_CROP] track_id=%s", tid)
                         continue
                     elif face_chip.size != 0:
                         try:

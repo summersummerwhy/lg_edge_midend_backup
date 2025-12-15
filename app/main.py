@@ -22,6 +22,8 @@ async def on_startup():
     import logging
 
     logging.getLogger(__name__).info("[STARTUP] MQTT worker launched.")
+    logging.getLogger("app.mqtt.publisher").setLevel(logging.WARNING)
+    logging.getLogger("app.handlers").setLevel(logging.WARNING)
 
 
 @app.on_event("shutdown")
