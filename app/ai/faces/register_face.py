@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.INFO)
 
 def register_from_webcam(
     person_id: str,
-    max_samples: 10,
+    max_samples: int = 10,
     min_face_size: int = 80,
 ):
 
