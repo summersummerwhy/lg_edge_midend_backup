@@ -11,7 +11,15 @@ from pathlib import Path
 import cv2
 
 from .detectors import get_detector, BaseDetector
-from .ai_config import DETECTOR, TRACKER, CONFIDENCE_THRESHOLD, BENCHMARK_MODE, ARCFACE_ONNX_PATH
+from .ai_config import (DETECTOR, 
+    TRACKER, 
+    CONFIDENCE_THRESHOLD, 
+    BENCHMARK_MODE, 
+    ARCFACE_ONNX_PATH,     
+    FACE_RETRY_INTERVAL_SEC,
+    FACE_MAX_TRY,
+    FACE_MIN_SIZE
+)
 from .faces import get_face_matcher
 from .faces.detector import MediaPipeFaceDetector
 from .faces.embedder import ArcFaceONNXEmbedder
@@ -139,14 +147,20 @@ class AIInference:
 
         return tracks
 
+    @staticmethod
+    def _clamp_box(x1: int, y1: int, x2: int, y2: int, w: int, h: int):
+        x1 = max(0, min(x1, w - 1))
+        x2 = max(0, min(x2, w))
+        y1 = max(0, min(y1, h - 1))
+        y2 = max(0, min(y2, h))
+        return x1, y1, x2, y2
+
+
     def update_face_pending(
         self,
         image: np.ndarray,
         tracks: List[Dict],
         entered_ids: List[int],
-        n_sec: float = 0.5,
-        m_try: int = 6,
-        min_face_size: int = 80,
     ) -> List[Dict]:
         """
         입장한 track_id들에 대해 n초 간격으로 최대 m번 얼굴 인식 시도.
@@ -188,105 +202,56 @@ class AIInference:
 
             # ---- 얼굴 인식 1회 시도 ----
             st["attempts"] += 1
+            st["next_time"] = now + FACE_RETRY_INTERVAL_SEC
             log.info(
                 "[FACE][TRY] track_id=%s attempt=%d/%d",
-                tid, st["attempts"], m_try
+                tid, st["attempts"], FACE_MAX_TRY
             )
-            st["next_time"] = now + n_sec
 
-            box = t.get("box")
-            if not box:
-                continue
+            try:
+                r = self.try_recognize_face_on_track(
+                    image=image,
+                    track=t,
+                )
+            except Exception as e:
+                log.exception("[FACE] try_recognize_face_on_track error track_id=%s: %s", tid, e)
+                r = None
 
-            x1, y1, x2, y2 = map(int, box)
-
-            # 사람 박스 클램프
-            x1 = max(0, min(x1, w - 1))
-            x2 = max(0, min(x2, w))
-            y1 = max(0, min(y1, h - 1))
-            y2 = max(0, min(y2, h))
-
-            pw, ph = x2 - x1, y2 - y1
-            if pw <= 0 or ph <= 0:
-                continue
-            if pw < min_face_size or ph < min_face_size:
-                continue
-
-            person_crop = image[y1:y2, x1:x2]
-            if person_crop.size == 0:
-                continue
-
-            faces = self.face_detector.detect_faces(person_crop)
-            if not faces:
-                log.info("[FACE][NOFACE] track_id=%s attempt=%d/%d", tid, st["attempts"], m_try)
-                # 얼굴 못 찾으면 이번 시도 실패
-                pass
+            if r is None:
+                log.info("[FACE][NOFACE] track_id=%s attempt=%d/%d", tid, st["attempts"], FACE_MAX_TRY)
             else:
-                f = self.face_detector.select_main_face(faces)
-                fx1, fy1, fx2, fy2 = map(int, f["box"])
+                face_id = r["face_id"]
+                score = float(r["face_score"])
 
-                # 얼굴 박스도 crop 내부로 클램프 (중요)
-                ch, cw = person_crop.shape[:2]
-                fx1 = max(0, min(fx1, cw - 1))
-                fx2 = max(0, min(fx2, cw))
-                fy1 = max(0, min(fy1, ch - 1))
-                fy2 = max(0, min(fy2, ch))
+                # best 기록
+                if score > st["best_score"]:
+                    st["best_score"] = score
+                    st["best_id"] = face_id
 
-                fw, fh = fx2 - fx1, fy2 - fy1
-                if fw >= min_face_size and fh >= min_face_size:
-                    face_chip = person_crop[fy1:fy2, fx1:fx2]
-                    if face_chip.size == 0:
-                        continue
-                    elif face_chip.size != 0:
-                        try:
-                            emb = self.face_embedder.embed(face_chip)
-                            match = self.face_matcher.match(emb)  # matcher가 unknown 판정까지 하면 더 깔끔
-                            face_id = match.get("id", "unknown")
-                            score = float(match.get("score", 0.0))
+                log.info(
+                    "[FACE][MATCH] track_id=%s id=%s score=%.3f (best=%s %.3f)",
+                    tid, face_id, score, st["best_id"], st["best_score"]
+                )
 
-                            log.info(
-                                "[FACE][MATCH] track_id=%s id=%s score=%.3f (best=%s %.3f)",
-                                tid,
-                                face_id,
-                                score,
-                                st["best_id"],
-                                st["best_score"],
-                            )
+                # 성공 조건: unknown이 아니면 즉시 완료
+                if str(face_id).lower() != "unknown":
+                    results.append({
+                        "type": "enter",
+                        "track_id": tid,
+                        "face_id": face_id,
+                        "face_score": score,
+                        "face_box": r.get("face_box"),
+                        "meta": {"attempts": st["attempts"], "mode": "face_retry"},
+                    })
+                    done_ids.append(tid)
+                    log.info("[FACE][SUCCESS] track_id=%s id=%s score=%.3f", tid, face_id, score)
+                    continue
 
-                            # best 기록
-                            if score > st["best_score"]:
-                                st["best_score"] = score
-                                st["best_id"] = face_id
-
-                            # 성공 조건: unknown이 아니면 즉시 완료
-                            if face_id != "unknown":
-                                results.append({
-                                    "type": "enter",
-                                    "track_id": tid,
-                                    "box": t.get("box"),
-                                    "confidence": t.get("confidence", 0.0),
-                                    "face_id": face_id,
-                                    "face_score": score,
-                                    "face_box": [x1 + fx1, y1 + fy1, x1 + fx2, y1 + fy2],
-                                    "meta": {"attempts": st["attempts"], "mode": "face_retry"},
-                                })
-                                done_ids.append(tid)
-                                log.info(
-                                    "[FACE][SUCCESS] track_id=%s id=%s score=%.3f attempts=%d",
-                                    tid, face_id, score, st["attempts"]
-                                )
-                                continue
-
-                        except Exception as e:
-                            log.exception("[FACE] pending embed/match error track_id=%s: %s", tid, e)
-
-            # ---- 이번 시도에서 성공 못 했으면: m회 초과 시 unknown 완료 ----
-            if st["attempts"] >= m_try:
+            # ---- m회 초과 시 unknown 완료 ----
+            if st["attempts"] >= FACE_MAX_TRY:
                 results.append({
                     "type": "enter",
                     "track_id": tid,
-                    "box": t.get("box"),
-                    "confidence": t.get("confidence", 0.0),
                     "face_id": "unknown",
                     "face_score": float(st["best_score"]) if st["best_score"] >= 0 else 0.0,
                     "face_box": None,
@@ -304,121 +269,81 @@ class AIInference:
 
         return results
 
-
     
-    # def run_face_recognition(
-    #     self,
-    #     image: np.ndarray,
-    #     tracks: List[Dict],
-    #     min_face_size: int = 80,
-    #     match_threshold: float = 0.6,
-    # ) -> List[Dict]:
-    #     """
-    #     person tracks + 전체 이미지 → 각 track별 얼굴 인식 결과 리스트.
+    
+    def try_recognize_face_on_track(
+        self,
+        image: np.ndarray,
+        track: Dict,
+    ) -> Optional[Dict]:
+        """
+        단일 track에 대해 얼굴 인식 1회 시도.
+        성공/실패 여부와 관계없이 "이번 시도 결과"를 반환하거나,
+        인식할 조건이 안 되면 None 반환.
 
-    #     Args:
-    #         image: 전체 프레임 (BGR, HWC)
-    #         tracks: process_image() 결과 리스트
-    #         min_face_size: 이 크기보다 작은 얼굴은 무시 (px)
-    #         match_threshold: 이 값보다 similarity가 낮으면 "unknown" 처리
+        Returns (성공 시):
+            {
+              "face_id": str,
+              "face_score": float,
+              "face_box": [abs_fx1, abs_fy1, abs_fx2, abs_fy2],
+            }
 
-    #     Returns:
-    #         [
-    #             {
-    #                 "track_id": 3,
-    #                 "person_box": [x1,y1,x2,y2],
-    #                 "face_box": [fx1,fy1,fx2,fy2],   # 전체 이미지 기준 좌표
-    #                 "face_id": "Seohyun" or "unknown",
-    #                 "face_score": 0.83,
-    #             },
-    #             ...
-    #         ]
-    #     """
-    #     results: List[Dict] = []
+        Returns (실패/미검출 시):
+            None
+        """
+        # 얼굴 파이프라인 준비 안 된 경우
+        if (
+            getattr(self, "face_detector", None) is None
+            or getattr(self, "face_embedder", None) is None
+            or getattr(self, "face_matcher", None) is None
+        ):
+            return None
 
-    #     # 얼굴 파이프라인이 준비 안 된 경우
-    #     if (
-    #         getattr(self, "face_detector", None) is None
-    #         or getattr(self, "face_embedder", None) is None
-    #         or getattr(self, "face_matcher", None) is None
-    #     ):
-    #         return results
+        box = track.get("box")
+        if not box:
+            return None
 
-    #     h, w, _ = image.shape
+        h, w = image.shape[:2]
+        x1, y1, x2, y2 = map(int, box)
+        x1, y1, x2, y2 = self._clamp_box(x1, y1, x2, y2, w, h)
 
-    #     for t in tracks:
-    #         box = t.get("box")
-    #         track_id = t.get("track_id")
-    #         if box is None or track_id is None:
-    #             continue
+        pw, ph = x2 - x1, y2 - y1
+        if pw <= 0 or ph <= 0:
+            return None
 
-    #         x1, y1, x2, y2 = map(int, box)
-    #         # 이미지 바운더리 안으로 클램핑
-    #         x1 = max(0, min(x1, w - 1))
-    #         x2 = max(0, min(x2, w))
-    #         y1 = max(0, min(y1, h - 1))
-    #         y2 = max(0, min(y2, h))
+        person_crop = image[y1:y2, x1:x2]
+        if person_crop.size == 0:
+            return None
 
-    #         pw, ph = x2 - x1, y2 - y1
-    #         if pw <= 0 or ph <= 0:
-    #             continue
+        # 사람 영역 내부에서 얼굴 탐지
+        faces = self.face_detector.detect_faces(person_crop)
+        if not faces:
+            return None
 
-    #         # 사람 박스 자체가 너무 작으면 스킵
-    #         if pw < min_face_size or ph < min_face_size:
-    #             continue
+        f = self.face_detector.select_main_face(faces)
+        fx1, fy1, fx2, fy2 = map(int, f["box"])
 
-    #         # 1) 사람 영역 crop
-    #         person_crop = image[y1:y2, x1:x2]
-    #         if person_crop.size == 0:
-    #             continue
+        ch, cw = person_crop.shape[:2]
+        fx1, fy1, fx2, fy2 = self._clamp_box(fx1, fy1, fx2, fy2, cw, ch)
 
-    #         # 2) 사람 영역 내부에서 얼굴 탐지
-    #         faces = self.face_detector.detect_faces(person_crop)
-    #         if not faces:
-    #             continue
+        fw, fh = fx2 - fx1, fy2 - fy1
+        if fw < FACE_MIN_SIZE or fh < FACE_MIN_SIZE:
+            return None
 
-    #         # 가장 큰 얼굴 선택
-    #         f = self.face_detector.select_main_face(faces)
-    #         fx1, fy1, fx2, fy2 = map(int, f["box"])
-    #         fw, fh = fx2 - fx1, fy2 - fy1
+        face_chip = person_crop[fy1:fy2, fx1:fx2]
+        if face_chip.size == 0:
+            return None
 
-    #         if fw < min_face_size or fh < min_face_size:
-    #             continue
+        # embedding + match
+        emb = self.face_embedder.embed(face_chip)
+        match = self.face_matcher.match(emb)
 
-    #         # person_crop 기준 얼굴 crop
-    #         face_chip = person_crop[fy1:fy2, fx1:fx2]
-    #         if face_chip.size == 0:
-    #             continue
+        face_id = match.get("id", "unknown")
+        score = float(match.get("score", 0.0))
 
-    #         # 3) embedding 추출
-    #         try:
-    #             emb = self.face_embedder.embed(face_chip)
-    #         except Exception as e:
-    #             log.exception("[FACE] embed error for track_id=%s: %s", track_id, e)
-    #             continue
+        abs_box = [x1 + fx1, y1 + fy1, x1 + fx2, y1 + fy2]
+        return {"face_id": face_id, "face_score": score, "face_box": abs_box}
 
-    #         # 4) DB 매칭
-    #         match = self.face_matcher.match(emb)
-    #         face_id = match.get("id", "unknown")
-    #         score = float(match.get("score", 0.0))
-
-    #         # 얼굴 박스를 전체 이미지 기준으로 변환
-    #         abs_fx1 = x1 + fx1
-    #         abs_fy1 = y1 + fy1
-    #         abs_fx2 = x1 + fx2
-    #         abs_fy2 = y1 + fy2
-
-    #         results.append(
-    #             {
-    #                 "track_id": track_id,
-    #                 "person_box": [x1, y1, x2, y2],
-    #                 "face_box": [abs_fx1, abs_fy1, abs_fx2, abs_fy2],
-    #                 "face_id": face_id,
-    #                 "face_score": score,
-    #             }
-    #         )
-
-    #     return results
 
     def detect_enter_exit(self, tracks: List[Dict]) -> Dict:
         """

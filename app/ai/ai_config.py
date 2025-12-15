@@ -29,8 +29,6 @@ TRACK_THRESH = 0.5          # 추적 임계값
 BENCHMARK_MODE = True      # True면 FPS 측정
 BENCHMARK_FRAMES = 100      # 벤치마크 프레임 수
 
-
-
 # ===== Face Matcher 설정 =====
 # 옵션: "simple"
 FACE_MATCHER = "simple"
@@ -53,4 +51,9 @@ ARCFACE_ONNX_PATH = "arcface_r100.onnx"
 # ===== 얼굴 최소 크기 (pixel * pixel) ===== 
 FACE_MIN_AREA = 80 * 80
 
+
+# ===== Face recognition retry policy =====
+FACE_RETRY_INTERVAL_SEC = 0.5   # n_sec
+FACE_MAX_TRY = 6                # m_try
+FACE_MIN_SIZE = 80              # 이미 쓰고 있으면 여기도 통합 추천
 

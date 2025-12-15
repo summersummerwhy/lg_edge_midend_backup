@@ -127,9 +127,6 @@ def track_image(image: np.ndarray, format: str = "jpg") -> List[Dict]:
             image=image,
             tracks=tracks,
             entered_ids=entered_ids,
-            n_sec=0.5,
-            m_try=6,
-            min_face_size=80,
         )
     except AttributeError:
         # update_face_pending을 아직 안 붙였으면 아무것도 안 보냄
