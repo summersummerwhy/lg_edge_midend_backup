@@ -50,6 +50,12 @@ async def handle_motion(msg: Envelope) -> None:
     if is_duplicate(msg.device, "motion", msg.seq):
         return
     p = MotionPayload(**msg.payload)
+    
+    prv_motion = latest.get((msg.device, "motion"), {
+        "payload": {"motion": 0}
+    }).get("payload", {}).get("motion")
+    cur_motion = p.motion
+
     latest[(msg.device, "motion")] = {
         "device": msg.device,
         "ts": msg.ts,
@@ -58,6 +64,16 @@ async def handle_motion(msg: Envelope) -> None:
         "ts_iso": ts_to_iso(msg.ts),
     }
     log.info("[MOTION] %s seq=%s motion=%s", msg.device, msg.seq, p.motion)
+
+    if (prv_motion == 0 and cur_motion == 1):
+        await publish_mqtt(
+            "topst/topst/motion",
+            {
+                "device": msg.device,
+                "ts": msg.ts,
+                "seq": msg.seq
+            },
+        )
 
 
 async def handle_audio(msg: Envelope) -> None:
