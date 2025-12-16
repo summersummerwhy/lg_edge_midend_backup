@@ -76,14 +76,17 @@ def register_from_webcam(
 
         h, w = frame.shape[:2]
 
-        next_pose = (
-            pose_plan[len(collected)] if len(collected) < 10 else "done! press q"
-        )
+        next_pose = "up to you..."
 
+        if len(collected) < 10:
+            pose_plan[len(collected)]
+        elif len(collected) > max_samples:
+            "done! press q"
+            
         # 안내 텍스트
         cv2.putText(
             frame,
-            f"ID: {person_id} | collected: {len(collected)}/10",
+            f"ID: {person_id} | collected: {len(collected)}/{max_samples}",
             (10, 25),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
@@ -200,12 +203,20 @@ def main():
         required=True,
         help="등록할 사람 ID (예: Seohyun, Dad 등)",
     )
+    parser.add_argument(
+        "--n",
+        "--trial-n",
+        dest="n",
+        required=True,
+        help="등록할 사람 ID (예: Seohyun, Dad 등)",
+    )
 
 
     args = parser.parse_args()
 
     register_from_webcam(
         person_id=args.person_id,
+        max_samples=int(args.n),
     )
 
 
