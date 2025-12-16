@@ -115,11 +115,25 @@ class SimpleFaceMatcher(BaseFaceMatcher):
                 best_score = agg
                 best_person = person_id
 
-        if best_person is None or best_score < self.threshold:
+        if best_person is None:
             return {
                 "id": "unknown",
                 "score": 0.0,
-                "meta": {"reason": "no_match", "db_size": len(self._db)},
+                "meta": {"reason": "no_candidate", "db_size": len(self._db)},
+            }
+        
+        if best_score < self.threshold:
+            return {
+                "id": "unknown",
+                "score": float(best_score),  # ★ 여기!
+                "meta": {
+                    "reason": "below_threshold",
+                    "best_person": best_person,
+                    "best_score": float(best_score),
+                    "threshold": float(self.threshold),
+                    "db_size": len(self._db),
+                    "method": f"top{TOPK}_mean",
+                },
             }
 
         return {
