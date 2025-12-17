@@ -72,6 +72,7 @@ class AIInference:
         self.previous_tracks = {}  # {track_id: box}
         self.face_pending: Dict[int, Dict] = {}
         self.entered_tracks = set()
+        self.track_face_map = {}
         
         # FPS 측정
         self.fps_history = []
@@ -235,6 +236,7 @@ class AIInference:
 
                 # 성공 조건: unknown이 아니면 즉시 완료
                 if str(face_id).lower() != "unknown":
+                    self.track_face_map[tid] = face_id
                     results.append({
                         "type": "enter",
                         "track_id": tid,
@@ -249,6 +251,7 @@ class AIInference:
 
             # ---- m회 초과 시 unknown 완료 ----
             if st["attempts"] >= FACE_MAX_TRY:
+                self.track_face_map[tid] = "unknown"
                 results.append({
                     "type": "enter",
                     "track_id": tid,
@@ -363,7 +366,17 @@ class AIInference:
         previous_ids = set(self.previous_tracks.keys())
         
         entered = list(current_ids - previous_ids)
-        exited = list(previous_ids - current_ids)
+        exited_ids = list(previous_ids - current_ids)
+        
+        exited = []
+        for tid in exited_ids:
+            face_id = self.track_face_map.pop(tid, "unknown")
+            box = self.previous_tracks.get(tid)
+            exited.append({
+                "track_id": tid,
+                "box": box,
+                "face_id": face_id
+            })
         
         # 현재 상태 저장
         current_tracks = {t["track_id"]: t["box"] for t in tracks}

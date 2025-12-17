@@ -99,7 +99,11 @@ def track_image(image: np.ndarray, format: str = "jpg") -> List[Dict]:
     h, w = image.shape[:2]
 
     # 3) 퇴장 이벤트는 즉시 전송 + pending 정리
-    for track_id in exited_ids:
+    for exit_item in exited_ids:
+        track_id = exit_item["track_id"]
+        face_id = exit_item.get("face_id", "unknown")
+        box = exit_item.get("box")
+
         # pending에 남아있던 입장 대기(track)도 정리
         if hasattr(ai, "face_pending"):
             ai.face_pending.pop(track_id, None)
@@ -112,8 +116,10 @@ def track_image(image: np.ndarray, format: str = "jpg") -> List[Dict]:
         payloads.append({
             "type": "exit",
             "track_id": track_id,
+            "face_id": face_id,
+            "box": box,
         })
-        log.info(f"[AI] EXIT: track_id={track_id}")
+        log.info(f"[AI] EXIT: track_id={track_id} face_id={face_id}")
 
         # exit 보냈으면 기록에서 제거(메모리/재사용 대비)
         if hasattr(ai, "entered_tracks"):

@@ -4,7 +4,6 @@ import logging
 log = logging.getLogger(__name__)
 
 # Global state
-track_face_map = {}  # track_id -> face_id
 pending_exits = (
     deque()
 )  # [{"ts": int, "alert": dict, "face_id": str, "expire_ts": int}]
@@ -12,7 +11,7 @@ EXIT_DELAY_MS = 1000
 
 
 def face_dedup(alerts):
-    global track_face_map, pending_exits
+    global pending_exits
 
     output_alerts = []
 
@@ -32,8 +31,6 @@ def face_dedup(alerts):
             face_id = payload.get("face_id")
 
             if face_id and face_id != "unknown":
-                track_face_map[track_id] = face_id
-
                 # 1초 이내에 퇴장한 기록이 있는지 확인
                 found_idx = -1
                 for i, p_exit in enumerate(pending_exits):
@@ -56,9 +53,9 @@ def face_dedup(alerts):
             output_alerts.append(alert)
 
         elif alert_type == "exit":
-            face_id = track_face_map.get(track_id)
+            face_id = payload.get("face_id")
 
-            if face_id:
+            if face_id and face_id != "unknown":
                 # 퇴장 알림 버퍼링
                 expire_ts = current_ts + EXIT_DELAY_MS
                 pending_exits.append(
@@ -68,13 +65,9 @@ def face_dedup(alerts):
                         "expire_ts": expire_ts,
                     }
                 )
-                # 맵에서 제거 (버퍼에 face_id 저장됨)
-                del track_face_map[track_id]
             else:
                 # face_id 모르면 그냥 통과
                 output_alerts.append(alert)
-                if track_id in track_face_map:
-                    del track_face_map[track_id]
 
         else:
             output_alerts.append(alert)
