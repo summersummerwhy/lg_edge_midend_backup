@@ -1,4 +1,5 @@
 from .dedup import dedup
+from .face_dedup import face_dedup
 from .suppression import suppression
 
 import logging
@@ -20,7 +21,9 @@ def process_alerts(alerts):
 
     log.info(f"[DEDUP] Alerts after suppression: {len(alerts)} alerts")
 
-    alerts = dedup(alerts)
+    alerts = dedup(alerts)  # 1분 이내 3번 입/퇴장시 무시
+
+    alerts = face_dedup(alerts)  # 1초 이내 같은 얼굴 입/퇴장시 무시
 
     log.info(f"[DEDUP] Alerts after deduplication: {len(alerts)} alerts")
 
