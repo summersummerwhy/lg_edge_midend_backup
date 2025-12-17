@@ -190,4 +190,28 @@ def track_image(image: np.ndarray, format: str = "jpg") -> List[Dict]:
             payloads[-1]["meta"].get("attempts"),
         )
 
+    # payloads = convert_enter_exit(payloads)
+
     return payloads
+
+ENTER_THRESHOLD = 0
+EXIT_THRESHOLD = 0
+
+def convert_enter_exit(payloads: List[Dict]) -> List[Dict]:
+    new_payloads = []
+
+    # box = x1,y1,x2,y2
+
+    for payload in payloads:
+        if payload["type"] == "enter":
+            # 예시
+            if payload["box"][1] >= ENTER_THRESHOLD:
+                payload["type"] = "exit"
+                new_payloads.append(payload)
+        elif payload["type"] == "exit":
+            # 예시
+            if payload["box"][1] <= EXIT_THRESHOLD:
+                payload["type"] = "enter"
+                new_payloads.append(payload)
+
+    return new_payloads
