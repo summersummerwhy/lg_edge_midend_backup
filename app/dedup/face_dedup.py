@@ -24,6 +24,10 @@ def face_dedup(alerts):
             output_alerts.append(expired["alert"])
 
         payload = alert["payload"]
+        if payload.get("priority") == "low":
+            output_alerts.append(alert)
+            continue
+
         alert_type = payload["type"]
         track_id = payload["track_id"]
 
@@ -34,14 +38,17 @@ def face_dedup(alerts):
                 # 1초 이내에 퇴장한 기록이 있는지 확인
                 found_idx = -1
                 for i, p_exit in enumerate(pending_exits):
-                    if p_exit["face_id"] == face_id:
+                    if p_exit["face_id"] == face_id and p_exit["alert"]["payload"]["priority"] != "low":
                         found_idx = i
                         break
 
                 if found_idx != -1:
                     # 매칭되는 퇴장 알림 발견 -> 둘 다 무시
                     removed_exit = pending_exits[found_idx]
-                    del pending_exits[found_idx]
+                    removed_exit["alert"]["payload"]["priority"] = "low"
+
+                    alert["payload"]["priority"] = "low"
+                    output_alerts.append(alert)
 
                     log.info(
                         f"[FACE_DEDUP] Suppressed re-entry: face_id={face_id}, "
