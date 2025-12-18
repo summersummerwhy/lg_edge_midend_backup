@@ -67,7 +67,7 @@ async def handle_motion(msg: Envelope) -> None:
 
     if (prv_motion == 0 and cur_motion == 1):
         await publish_mqtt(
-            "topst/topst/motion",
+            "raspberry/topst/motion",
             {
                 "device": msg.device,
                 "ts": msg.ts,
