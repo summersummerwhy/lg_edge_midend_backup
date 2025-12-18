@@ -53,7 +53,7 @@ FACE_MIN_AREA = 80 * 80
 
 
 # ===== Face recognition retry policy =====
-FACE_RETRY_INTERVAL_SEC = 0.5   # n_sec
-FACE_MAX_TRY = 6                # m_try
-FACE_MIN_SIZE = 80              # 이미 쓰고 있으면 여기도 통합 추천
+FACE_RETRY_INTERVAL_SEC = 0.3   # n_sec
+FACE_MAX_TRY = 7                # m_try
+FACE_MIN_SIZE = 80         
 

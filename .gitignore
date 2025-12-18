@@ -6,5 +6,4 @@ venv
 .env
 .DS_Store
 *.onnx
-**/embeddings.json
 .venv
