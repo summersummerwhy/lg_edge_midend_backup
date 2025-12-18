@@ -10,7 +10,7 @@ import cv2
 from app.ai.main import track_image_by_path, track_image
 from app.ai.temp import add_new_face
 from app.dedup.main import process_alerts
-from .config import AUDIO_DIR, IMAGE_DIR, DEVICE_NAMESPACE, AUDIO_SAVE_INTERVAL
+from .config import AUDIO_DIR, IMAGE_DIR, DEVICE_NAMESPACE, AUDIO_SAVE_INTERVAL, DATA_DIR
 from .models import Envelope, MotionPayload, AudioPayload, CameraPayload, FacePayload
 from .utils import ts_to_iso, safe_filename, save_wav_pcm16_mono
 from .state import (
@@ -55,6 +55,11 @@ async def handle_motion(msg: Envelope) -> None:
         "payload": {"motion": 0}
     }).get("payload", {}).get("motion")
     cur_motion = p.motion
+
+    if prv_motion != cur_motion:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with open(DATA_DIR / "motion.txt", "a") as f:
+            f.write(f"{msg.ts}: {cur_motion}\n")
 
     latest[(msg.device, "motion")] = {
         "device": msg.device,
