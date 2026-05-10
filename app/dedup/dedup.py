@@ -2,8 +2,8 @@ from collections import deque
 
 prv_alerts = deque()
 
-MINUTE_IN_MS = 60 * 1000
-MAX_ENTER_COUNT = 3
+MINUTE_IN_MS = 30 * 1000
+MAX_ENTER_COUNT = 1
 
 
 def update_id_map(id_map, alert):

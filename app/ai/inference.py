@@ -331,6 +331,7 @@ class AIInference:
 
         fw, fh = fx2 - fx1, fy2 - fy1
         if fw < FACE_MIN_SIZE or fh < FACE_MIN_SIZE:
+            log.info("[FACE][SIZE] width=%d, height=%d", fw, fh)
             return None
 
         face_chip = person_crop[fy1:fy2, fx1:fx2]
