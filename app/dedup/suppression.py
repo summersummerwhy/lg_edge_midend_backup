@@ -1,12 +1,20 @@
 def suppression(alerts):
-    # TODO: 아는 사람인 경우 priority medium
-
     for alert in alerts:
-        alert["payload"]["priority"] = "high"
-        # TODO: 불필요한 알림인 경우가 사실상 없지 않나?
-        #       -> UI랑 연계해서 사용자가 설정한 알림만 priority 울리게 하기?
-        # alert_type = alert["payload"]["type"]
-        # if (alert_type == "exit" and options.suppress_exit_alerts):
-        #     alert["payload"]["priority"] = "low"
+        payload = alert.get("payload", {})
+        face_id = payload.get("face_id")
+
+        # 기본값: unknown/high
+        pr = "high"
+
+        # face_id가 있고 unknown이 아니면 known
+        if face_id is not None and str(face_id).lower() != "unknown":
+            pr = "medium"
+
+        # (선택) exit는 알림 중요도 낮추고 싶으면 여기서 조절 가능
+        if payload.get("type") == "exit":
+            pr = "low"
+
+        payload["priority"] = pr
+        alert["payload"] = payload
 
     return alerts

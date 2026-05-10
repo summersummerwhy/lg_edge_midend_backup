@@ -18,7 +18,6 @@ log = logging.getLogger(__name__)
 _mqtt_client: Optional[MQTTClient] = None
 seq_number = 0
 
-
 async def _connect_client() -> MQTTClient:
     global _mqtt_client
     if _mqtt_client is not None:
@@ -66,12 +65,13 @@ async def publish_mqtt(
     payload = json.dumps(body, ensure_ascii=False, default=str).encode("utf-8")
 
     attempt = 0
+    log.info("[MQTT-PUB] Try publishing to %s", topic)
     while True:
         try:
             async with mqtt_lock:
                 client = await _connect_client()
                 await client.publish(topic, payload, qos=qos, retain=retain)
-            log.debug(
+            log.info(
                 "[MQTT-PUB] Published to %s (qos=%s, retain=%s, seq=%s)",
                 topic,
                 qos,

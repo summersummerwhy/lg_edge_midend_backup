@@ -152,8 +152,8 @@ class BenchmarkRunner:
         """
         모든 조합 테스트
         """
-        detectors = ["yolov8n", "yolo11n"]  # mobilenet_ssd는 모델 파일 필요
-        trackers = ["bytetrack", "deepsort"]  # botsort는 YOLO 통합 필요
+        detectors = ["yolov8n", "yolov11n", "yolov5n", "rtdetr", "effdetlite"] 
+        trackers = ["bytetrack", "deepsort"]  
 
         print(f"\n🚀 Starting Benchmark")
         print(f"Frames per test: {self.num_frames}")

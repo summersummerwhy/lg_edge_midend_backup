@@ -24,6 +24,13 @@ class CameraPayload(BaseModel):
     total: Optional[int] = None
 
 
+class FacePayload(BaseModel):
+    format: str
+    width: PositiveInt
+    height: PositiveInt
+    data: str
+
+
 class Envelope(BaseModel):
     device: str
     ts: int  # UTC ms

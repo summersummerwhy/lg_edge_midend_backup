@@ -1,15 +1,28 @@
-# mqtt
+# --- Core server & API ---
 fastapi
 uvicorn[standard]
+
+# --- MQTT / async ---
 asyncio-mqtt==0.16.2
 paho-mqtt==1.6.1
+
+# --- Utils ---
 pydantic
 orjson
 python-dotenv
 
-# AI
+# --- AI ---
 numpy
 opencv-python
 torch
 torchvision
 ultralytics
+mediapipe
+effdet
+onnxruntime
+
+# --- Tracking ---
+lap==0.5.12
+
+
+

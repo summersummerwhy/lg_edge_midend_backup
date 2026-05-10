@@ -2,4 +2,8 @@
 data
 **/__pycache__
 *.pt
+venv
+.env
+.DS_Store
+*.onnx
 .venv

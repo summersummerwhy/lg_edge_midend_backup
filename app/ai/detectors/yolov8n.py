@@ -1,5 +1,5 @@
 """
-YOLOv8n Detector (YOLO11n보다 빠름)
+YOLOv8n Detector
 Ultralytics YOLOv8n 사용
 """
 
@@ -12,8 +12,6 @@ from .base import BaseDetector
 class YOLOv8nDetector(BaseDetector):
     """
     YOLOv8n 감지 모델
-    - YOLO11n보다 약간 더 빠름
-    - 정확도는 비슷
     """
 
     def __init__(self, model_path: str = "yolov8n.pt", confidence: float = 0.5):

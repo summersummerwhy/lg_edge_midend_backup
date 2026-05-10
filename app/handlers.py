@@ -8,9 +8,10 @@ import numpy as np
 import cv2
 
 from app.ai.main import track_image_by_path, track_image
+from app.ai.temp import add_new_face
 from app.dedup.main import process_alerts
-from .config import AUDIO_DIR, IMAGE_DIR, DEVICE_NAMESPACE, AUDIO_SAVE_INTERVAL
-from .models import Envelope, MotionPayload, AudioPayload, CameraPayload
+from .config import AUDIO_DIR, IMAGE_DIR, DEVICE_NAMESPACE, AUDIO_SAVE_INTERVAL, DATA_DIR
+from .models import Envelope, MotionPayload, AudioPayload, CameraPayload, FacePayload
 from .utils import ts_to_iso, safe_filename, save_wav_pcm16_mono
 from .state import (
     latest,
@@ -38,10 +39,28 @@ def _save_image_file(device: str, ts: int, seq: int, jpg: bytes) -> Path:
     return fpath
 
 
+def face_ai(img: np.ndarray) -> None:
+    """
+    가상의 Face AI 함수
+    """
+    log.info(f"[FACE_AI] Processing image shape={img.shape}")
+
+
 async def handle_motion(msg: Envelope) -> None:
     if is_duplicate(msg.device, "motion", msg.seq):
         return
     p = MotionPayload(**msg.payload)
+    
+    prv_motion = latest.get((msg.device, "motion"), {
+        "payload": {"motion": 0}
+    }).get("payload", {}).get("motion")
+    cur_motion = p.motion
+
+    if prv_motion != cur_motion:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with open(DATA_DIR / "motion.txt", "a") as f:
+            f.write(f"{msg.ts}: {cur_motion}\n")
+
     latest[(msg.device, "motion")] = {
         "device": msg.device,
         "ts": msg.ts,
@@ -50,6 +69,16 @@ async def handle_motion(msg: Envelope) -> None:
         "ts_iso": ts_to_iso(msg.ts),
     }
     log.info("[MOTION] %s seq=%s motion=%s", msg.device, msg.seq, p.motion)
+
+    if (prv_motion == 0 and cur_motion == 1):
+        await publish_mqtt(
+            "raspberry/topst/motion",
+            {
+                "device": msg.device,
+                "ts": msg.ts,
+                "seq": msg.seq
+            },
+        )
 
 
 async def handle_audio(msg: Envelope) -> None:
@@ -276,6 +305,32 @@ async def handle_camera_chunk_raw(
     await _try_assemble_raw(device, seq, save_image=save_image)
 
 
+async def handle_face(msg: Envelope) -> None:
+    p = FacePayload(**msg.payload)
+
+    try:
+        img_bytes = base64.b64decode(p.data)
+        arr = np.frombuffer(img_bytes, dtype=np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+        if img is None:
+            log.error("[FACE] %s seq=%s failed to decode image", msg.device, msg.seq)
+            return
+
+        log.info(
+            "[FACE] %s seq=%s received face image %dx%d",
+            msg.device,
+            msg.seq,
+            p.width,
+            p.height,
+        )
+
+        add_new_face(img)
+
+    except Exception as e:
+        log.exception("[FACE] error: %s", e)
+
+
 async def _try_assemble_raw(device: str, seq: int, *, save_image: bool = True) -> None:
     key = (device, seq)
     header = raw_camera_headers.get(key)
@@ -396,11 +451,12 @@ async def _try_assemble_raw(device: str, seq: int, *, save_image: bool = True) -
 
         for alert in processed_alerts:
             await publish_mqtt(topic, alert)
-            log.debug(
-                "[AI-PUB] %s (%s, track_id=%s)",
+            log.warning(
+                "[AI-PUB] %s (%s, track_id=%s, face_id:%s)",
                 topic,
                 alert.get("payload").get("type"),
                 alert.get("payload").get("track_id"),
+                alert.get("payload").get("face_id"),
             )
     except Exception as e:
         log.exception("[AI][CAMERA] Publish AI error: %s", e)
